@@ -12,6 +12,7 @@
 #define DEFAULT_BRIGHTNESS 64
 
 // TBD this should be moved to a struct
+#define MAX_NUM_LEDS    60
 #define SENSE1_NUM_LEDS 60
 #define SENSE2_NUM_LEDS 60
 #define SENSE3_NUM_LEDS 60
@@ -27,26 +28,45 @@
 #define SENSE4_PIN_RECEIVE 10
 #define SENSE4_PIN_LED     11
 
-CapacitiveSensor sense1Sensor                = CapacitiveSensor(PIN_TOUCH_SEND, SENSE1_PIN_RECEIVE);
-CRGB             sense1Leds[SENSE1_NUM_LEDS];
-CapacitiveSensor sense2Sensor                = CapacitiveSensor(PIN_TOUCH_SEND, SENSE2_PIN_RECEIVE);
-CRGB             sense2Leds[SENSE2_NUM_LEDS];
-CapacitiveSensor sense3Sensor                = CapacitiveSensor(PIN_TOUCH_SEND, SENSE3_PIN_RECEIVE);
-CRGB             sense3Leds[SENSE3_NUM_LEDS];
-CapacitiveSensor sense4Sensor                = CapacitiveSensor(PIN_TOUCH_SEND, SENSE4_PIN_RECEIVE);
-CRGB             sense4Leds[SENSE4_NUM_LEDS];
+
+struct TouchLedStrip {
+    const uint8_t sendPin;
+    const uint8_t sensePin;
+    const uint8_t ledPin;
+    const uint8_t numLeds;
+
+    CapacitiveSensor sensor;
+    CRGB             leds[MAX_NUM_LEDS];
+
+    TouchLedStrip(int sendPin, int sensePin, int ledPin, int numLeds) : sendPin(sendPin), sensePin(sensePin), ledPin(ledPin),numLeds(numLeds), sensor(sendPin,sensePin) { }
+
+    void doSetup() {
+        sensor.set_CS_AutocaL_Millis(0xFFFFFFFF);
+    }
+};
+
+TouchLedStrip touchLedStrips[]{
+    TouchLedStrip(PIN_TOUCH_SEND, SENSE1_PIN_RECEIVE, SENSE1_PIN_LED, SENSE1_NUM_LEDS),
+    TouchLedStrip(PIN_TOUCH_SEND, SENSE2_PIN_RECEIVE, SENSE2_PIN_LED, SENSE2_NUM_LEDS), 
+    TouchLedStrip(PIN_TOUCH_SEND, SENSE3_PIN_RECEIVE, SENSE3_PIN_LED, SENSE3_NUM_LEDS), 
+    TouchLedStrip(PIN_TOUCH_SEND, SENSE4_PIN_RECEIVE, SENSE4_PIN_LED, SENSE4_NUM_LEDS) };
+
 
 void setup()
 {
 #if DEBUG_SERIAL
     Serial.begin(9600);
 #endif
+
+    for int index = 0; index < len(touchLedStrips); index++ {
+        touchLedStrips[index].doSetup()
+    FastLED.addLeds<LED_TYPE, SENSE1_PIN_LED, COLOR_ORDER>(sense1Leds, SENSE1_NUM_LEDS); 
+    }
     sense1Sensor.set_CS_AutocaL_Millis(0xFFFFFFFF);
     sense2Sensor.set_CS_AutocaL_Millis(0xFFFFFFFF);
     sense3Sensor.set_CS_AutocaL_Millis(0xFFFFFFFF);
     sense4Sensor.set_CS_AutocaL_Millis(0xFFFFFFFF);
     
-    FastLED.addLeds<LED_TYPE, SENSE1_PIN_LED, COLOR_ORDER>(sense1Leds, SENSE1_NUM_LEDS); 
     FastLED.addLeds<LED_TYPE, SENSE2_PIN_LED, COLOR_ORDER>(sense2Leds, SENSE2_NUM_LEDS); 
     FastLED.addLeds<LED_TYPE, SENSE3_PIN_LED, COLOR_ORDER>(sense3Leds, SENSE3_NUM_LEDS); 
     FastLED.addLeds<LED_TYPE, SENSE4_PIN_LED, COLOR_ORDER>(sense4Leds, SENSE4_NUM_LEDS); 
