@@ -28,6 +28,7 @@
 #define SENSE4_PIN_RECEIVE 10
 #define SENSE4_PIN_LED     11
 
+#define SENSE_CYCLES 30
 
 struct TouchLedStrip {
     const uint8_t sendPin;
@@ -42,6 +43,10 @@ struct TouchLedStrip {
 
     void doSetup() {
         sensor.set_CS_AutocaL_Millis(0xFFFFFFFF);
+    }
+
+    long sense() {
+        return sensor.capacitiveSensor(SENSE_CYCLES);
     }
 };
 
@@ -58,19 +63,43 @@ void setup()
     Serial.begin(9600);
 #endif
 
-    for int index = 0; index < len(touchLedStrips); index++ {
-        touchLedStrips[index].doSetup()
-    FastLED.addLeds<LED_TYPE, SENSE1_PIN_LED, COLOR_ORDER>(sense1Leds, SENSE1_NUM_LEDS); 
+    for (int index = 0; index < sizeof(touchLedStrips)/sizeof(TouchLedStrip); index++) {
+        touchLedStrips[index].doSetup();
+        // Workaround for the template
+        switch(touchLedStrips[index].ledPin) {
+            case SENSE1_PIN_LED:
+                FastLED.addLeds<LED_TYPE, SENSE1_PIN_LED, COLOR_ORDER>(touchLedStrips[index].leds, touchLedStrips[index].numLeds); 
+                break;
+            case SENSE2_PIN_LED:
+                FastLED.addLeds<LED_TYPE, SENSE2_PIN_LED, COLOR_ORDER>(touchLedStrips[index].leds, touchLedStrips[index].numLeds); 
+                break;
+            case SENSE3_PIN_LED:
+                FastLED.addLeds<LED_TYPE, SENSE3_PIN_LED, COLOR_ORDER>(touchLedStrips[index].leds, touchLedStrips[index].numLeds); 
+                break;
+            case SENSE4_PIN_LED:
+                FastLED.addLeds<LED_TYPE, SENSE4_PIN_LED, COLOR_ORDER>(touchLedStrips[index].leds, touchLedStrips[index].numLeds); 
+                break;
+        }
     }
-    sense1Sensor.set_CS_AutocaL_Millis(0xFFFFFFFF);
-    sense2Sensor.set_CS_AutocaL_Millis(0xFFFFFFFF);
-    sense3Sensor.set_CS_AutocaL_Millis(0xFFFFFFFF);
-    sense4Sensor.set_CS_AutocaL_Millis(0xFFFFFFFF);
-    
-    FastLED.addLeds<LED_TYPE, SENSE2_PIN_LED, COLOR_ORDER>(sense2Leds, SENSE2_NUM_LEDS); 
-    FastLED.addLeds<LED_TYPE, SENSE3_PIN_LED, COLOR_ORDER>(sense3Leds, SENSE3_NUM_LEDS); 
-    FastLED.addLeds<LED_TYPE, SENSE4_PIN_LED, COLOR_ORDER>(sense4Leds, SENSE4_NUM_LEDS); 
     FastLED.setBrightness(DEFAULT_BRIGHTNESS);
+}
+
+void loop()
+{
+    long start = millis();
+
+    for (int index = 0; index < sizeof(touchLedStrips)/sizeof(TouchLedStrip); index++) {
+        long sense = touchLedStrips[index].sense();
+#if DEBUG_SERIAL
+        debugSerial("senseTBD: ", start, sense1);
+#endif
+
+        if (sense > 50) {
+            touchLedStrips[index].leds[0] = CRGB::White; FastLED.show(); 
+        } else {
+            touchLedStrips[index].leds[0] = CRGB::Black; FastLED.show();
+        }
+    }
 }
 
 #if DEBUG_SERIAL
@@ -83,43 +112,3 @@ void debugSerial(long start, long total)
     Serial.println(total);
 }
 #endif
-
-void loop()
-{
-    long start = millis();
-    long sense1 =  sense1Sensor.capacitiveSensor(30);
-    long sense2 =  sense1Sensor.capacitiveSensor(30);
-    long sense3 =  sense1Sensor.capacitiveSensor(30);
-    long sense4 =  sense1Sensor.capacitiveSensor(30);
-
-#if DEBUG_SERIAL
-    debugSerial("sense1: ", start, sense1);
-    debugSerial("sense2: ", start, sense2);
-    debugSerial("sense3: ", start, sense3);
-    debugSerial("sense4: ", start, sense4);
-#endif
-
-    if (sense1 > 50) {
-        sense1Leds[0] = CRGB::White; FastLED.show(); 
-    } else {
-        sense1Leds[0] = CRGB::Black; FastLED.show();
-    }
-
-    if (sense2 > 50) {
-        sense2Leds[0] = CRGB::White; FastLED.show(); 
-    } else {
-        sense2Leds[0] = CRGB::Black; FastLED.show();
-    }
-
-    if (sense3 > 50) {
-        sense3Leds[0] = CRGB::White; FastLED.show(); 
-    } else {
-        sense3Leds[0] = CRGB::Black; FastLED.show();
-    }
-
-    if (sense4 > 50) {
-        sense4Leds[0] = CRGB::White; FastLED.show(); 
-    } else {
-        sense4Leds[0] = CRGB::Black; FastLED.show();
-    }
-}
