@@ -48,6 +48,14 @@
 #define INCREASE_SENSE_SPEED 200
 #define CYCLE_INTERVAL 40 // 41.666 == 24 update / sec
 
+#define ENABLE_RETRY_INTERVAL 1000 // if sense for a strip is disabled check every 1000 ms if the sense still times out
+#define SENSE_DISABLE_TIMEOUT 2 // timeout for the measurement that disables the sense measurement for ENABLE_RETRY_INTERVAL
+#define SENSE_ON_THREASHOLD 1000
+
+#define TRANSPARENT_RUNNER_COLOR CHSV{0,0,0}
+#define MAX_LEDS_PER_STRIP    60
+#define MIN_RUNNER_START_INTERVAL_MS 200
+#define MAX_ACTIVE_RUNNERS 20
 // lastCycle stores the end of the last cycle, so we can wait
 // wait that the next cycle will begin in CYCLE_INTERVAL 
 long lastCycle = millis();
@@ -59,6 +67,181 @@ CRGB fade(CRGB from, CRGB to, int percent) {
     result.b = from.b + ((to.b - from.b) / 100) * percent;
     return result;
 }
+
+CHSV fade(CHSV from, CHSV to, int percent) {
+    CHSV result;
+    result.h = from.h + ((to.h - from.h) / 100) * percent;
+    result.s = from.s + ((to.s - from.s) / 100) * percent;
+    result.v = from.v + ((to.v - from.v) / 100) * percent;
+    return result;
+}
+
+CHSV draw(CHSV back, CHSV frame) {
+    CHSV result;
+    uint8_t opacity = frame.v;
+    result.h = back.h + ((frame.h - back.h) / 255) * opacity;
+    result.s = back.s + ((frame.s - back.s) / 255) * opacity;
+    result.v = back.v + ((255 - back.s) / 255) * opacity;
+    return result;
+}
+
+struct SenseSensor {
+    const uint8_t sendPin;
+    const uint8_t sensePin;
+    bool active;
+    long disabledSince;
+    long *cycleTimestamp;
+
+    CapacitiveSensor sensor;
+
+    SenseSensor(const uint8_t sendPin, const uint8_t sensePin, long *cycleTimestamp): sendPin(sendPin), sensePin(sensePin), active(false), sensor(sendPin,sendPin), cycleTimestamp(cycleTimestamp) {}
+    void doSetup() { 
+        sensor.set_CS_AutocaL_Millis(0xFFFFFFFF);
+    }
+    bool sense() { 
+        if (active) {
+            long startTime = *cycleTimestamp;
+            long senseVal = sensor.capacitiveSensor(SENSE_MEASUREMENT_CYCLES);
+            if ( (*cycleTimestamp - startTime ) > SENSE_DISABLE_TIMEOUT) {
+                active = false;
+                disabledSince = startTime;
+            }
+            return senseVal >= SENSE_ON_THREASHOLD || senseVal <= -SENSE_ON_THREASHOLD;
+        } else {
+            if ( *cycleTimestamp > disabledSince + ENABLE_RETRY_INTERVAL ) {
+                // This would also be a good place to recalibrate
+                active = true;
+            }
+            return active; // for disabled sensors this will create pulses in the SENSE_DISABLE_TIMEOUT interval, should create nice runner effects if the sense is offline
+        }
+    }
+};
+
+struct LedRunner {
+    bool active;
+    int numLeds;
+    int activeLed;
+    long runnerSpeed;
+    CHSV runnerColor;
+    long glowTime;
+    long *cycleTimestamp;
+
+    uint8_t hueChange;     // amout of hue change in on interval
+    long hueChangeInterval; // interval ms the change of the hue value is applied
+    long hueLastChanged;
+
+    long startTime;
+
+    void init(int numLeds, long runnerSpeed, CHSV runnerColor, uint8_t hueChange, long hueChangeInterval, long glowTime, long *cycleTimestamp) {
+        numLeds = numLeds;
+        runnerSpeed = runnerSpeed;
+        runnerColor = runnerColor;
+        hueChange = hueChange;
+        hueChangeInterval = hueChangeInterval;
+        glowTime = glowTime;
+        cycleTimestamp = cycleTimestamp;
+    }
+
+    void updateHue() {
+        long curTime = millis();
+        if (hueLastChanged + hueChangeInterval > curTime) {
+            hueChangeInterval = curTime;
+            runnerColor + hueChange;
+        }
+    }
+    void setActiveLed() {
+        activeLed = numLeds * runnerSpeed / ( millis() - startTime ); 
+    }
+    CHSV ledColor(int ledIndex) {
+        if ( activeLed < ledIndex ) {
+            return TRANSPARENT_RUNNER_COLOR;
+        }
+    }
+};
+
+struct Background{
+    int numLeds;         // Number of leds of the strip
+    CHSV activeColor;    // LED active background color
+    CHSV inactiveColor;  // LED inactive background color
+    int ledActiveOffset; // the offset of the active led
+
+    long *cycleTimestamp;
+
+    Background(int numLeds, CHSV activeColor, CHSV inactiveColor, int ledActiveOffset, long *cycleTimestamp): numLeds(numLeds), activeColor(activeColor), inactiveColor(inactiveColor), ledActiveOffset(ledActiveOffset), cycleTimestamp(cycleTimestamp) {}
+    void calculateCycle(bool sensed) {}
+
+    CHSV getLedColor(int ledIndex) { }
+};
+
+struct Runners {
+    LedRunner runner[MAX_ACTIVE_RUNNERS];
+
+    CHSV getLedSprite(int ledIndex) { }
+};
+
+struct ImprovedTouchStrip {
+    int numLeds;         // Number of leds of the strip
+    CHSV runnerColor;    // LED color of the runner
+    
+    CRGB leds[MAX_LEDS_PER_STRIP];
+
+    long baseRunnerTime;
+    long runnerTimeDiff;
+
+    SenseSensor sensor;
+    Background backColor;
+    bool previousSense;
+
+    long curSense;           // stores the current sense value of the led strip
+    long cycleTimestamp; // stores the timestamp of the last cycle
+
+    long allActiveTimeMs;   // time it takes till all leds are lit
+    
+    long incSenseMsRatio;  // ratio the cycle duration in ms multiplied with if sense was active in that cycle
+    long decSenseMsRatio;  // ratio the cycle duration in ms multiplied with if sense was not active in that cycle
+    
+    long allActiveSense;  // the sense value of the strip to light up all light, this is calculated baed on the allActiveTime
+    long maxSense;        // the max sense value the strip can hold
+    
+    long lastRunnerStartTime;
+
+    Runners runners;
+
+    ImprovedTouchStrip(uint8_t sendPin, uint8_t sensePin, int numLeds, CHSV activeColor, CHSV inactiveColor, int ledActiveOffset, long allActiveTimeMs, long incSenseMsRatio, long decSenseMsRatio, long maxSenseOffset)
+        : numLeds(numLeds),
+          backColor(numLeds, activeColor, inactiveColor, ledActiveOffset, &cycleTimestamp), 
+          sensor(sendPin, sensePin, &cycleTimestamp),
+          curSense(0),
+          cycleTimestamp(millis()),
+          allActiveTimeMs(allActiveTimeMs), 
+          incSenseMsRatio(incSenseMsRatio), 
+          decSenseMsRatio(decSenseMsRatio), 
+          allActiveSense(allActiveTimeMs * incSenseMsRatio), 
+          maxSense(allActiveTimeMs * incSenseMsRatio + maxSenseOffset) { }
+
+    void runCycle(){
+        // First update the timestamp
+        long lastCycleTimestamp = cycleTimestamp;
+        cycleTimestamp = millis();
+
+        // Read in the sensor
+        bool sensed =  sensor.sense();
+        backColor.calculateCycle(sensed);
+        if ( sensed == true && previousSense == false ) {
+            //try to start a new runner
+            if ( cycleTimestamp - lastRunnerStartTime > MIN_RUNNER_START_INTERVAL_MS ) {
+                tryStartRunner();                
+            }
+        }
+        for ( int i = 0; i < numLeds; i++ ) {
+            CHSV ledBackColor = backColor.getLedColor(i);
+            CHSV ledSprite = runners.getLedSprite(i);
+            leds[i] = draw(ledBackColor, ledSprite); 
+        }
+    }
+    void tryStartRunner() {}
+    CHSV plotRunner(int ledIndex) {}
+};
 
 struct TouchLedStrip {
     bool connected;
@@ -83,9 +266,6 @@ struct TouchLedStrip {
     TouchLedStrip(int sendPin, int sensePin, int ledPin, int numLeds) : sendPin(sendPin), sensePin(sensePin), ledPin(ledPin),numLeds(numLeds), sensor(sendPin,sensePin) { }
     void doSetup() { 
         sensor.set_CS_AutocaL_Millis(0xFFFFFFFF);
-        if ( sense() >= 0 ) {
-            connected = true;
-        }
     }
     long sense() { return sensor.capacitiveSensor(SENSE_MEASUREMENT_CYCLES); }
     CRGB backColor(int ledIndex) {
@@ -141,7 +321,9 @@ struct TouchLedStrip {
     }
 };
 
-
+//ImprovedTouchStrip improvedTouchLeds[] {
+//    ImprovedTouchStrip(PIN_TOUCH_SEND, SENSE1_PIN_RECEIVE, SENSE1_PIN_LED),
+//};
 TouchLedStrip touchLedStrips[]{
     TouchLedStrip(PIN_TOUCH_SEND, SENSE1_PIN_RECEIVE, SENSE1_PIN_LED, SENSE1_NUM_LEDS),
     TouchLedStrip(PIN_TOUCH_SEND, SENSE2_PIN_RECEIVE, SENSE2_PIN_LED, SENSE2_NUM_LEDS), 
@@ -154,6 +336,8 @@ void setup()
 #if DEBUG
     Serial.begin(9600);
 #endif
+
+    //ImprovedTouchStrip ngTouchStrip = ImprovedTouchStrip(PIN_TOUCH_SEND, SENSE1_PIN_RECEIVE );
 
     for (int index = 0; index < sizeof(touchLedStrips)/sizeof(TouchLedStrip); index++) {
         touchLedStrips[index].doSetup();
