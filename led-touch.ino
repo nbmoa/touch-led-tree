@@ -55,7 +55,11 @@
 #define TRANSPARENT_RUNNER_COLOR CHSV{0,0,0}
 #define MAX_LEDS_PER_STRIP    60
 #define MIN_RUNNER_START_INTERVAL_MS 200
-#define MAX_ACTIVE_RUNNERS 20
+#define MAX_ACTIVE_RUNNERS 4
+
+#define DEFAULT_ACTIVE_COLOR    CHSV(0, 0, 255) // WHITE
+#define DEFAULT_INACTIVE_COLOR  CHSV(0, 0,  30) // DIMMED WHITE
+
 // lastCycle stores the end of the last cycle, so we can wait
 // wait that the next cycle will begin in CYCLE_INTERVAL 
 long lastCycle = millis();
@@ -241,6 +245,7 @@ struct ImprovedTouchStrip {
     }
     void tryStartRunner() {}
     CHSV plotRunner(int ledIndex) {}
+    void doSetup() {}
 };
 
 struct TouchLedStrip {
@@ -321,14 +326,18 @@ struct TouchLedStrip {
     }
 };
 
-//ImprovedTouchStrip improvedTouchLeds[] {
-//    ImprovedTouchStrip(PIN_TOUCH_SEND, SENSE1_PIN_RECEIVE, SENSE1_PIN_LED),
-//};
-TouchLedStrip touchLedStrips[]{
-    TouchLedStrip(PIN_TOUCH_SEND, SENSE1_PIN_RECEIVE, SENSE1_PIN_LED, SENSE1_NUM_LEDS),
-    TouchLedStrip(PIN_TOUCH_SEND, SENSE2_PIN_RECEIVE, SENSE2_PIN_LED, SENSE2_NUM_LEDS), 
-    TouchLedStrip(PIN_TOUCH_SEND, SENSE3_PIN_RECEIVE, SENSE3_PIN_LED, SENSE3_NUM_LEDS), 
-    TouchLedStrip(PIN_TOUCH_SEND, SENSE4_PIN_RECEIVE, SENSE4_PIN_LED, SENSE4_NUM_LEDS) };
+ImprovedTouchStrip improvedTouchLeds[] {
+    ImprovedTouchStrip(PIN_TOUCH_SEND, SENSE1_PIN_RECEIVE, SENSE1_NUM_LEDS, DEFAULT_ACTIVE_COLOR, DEFAULT_INACTIVE_COLOR, 2, 4000, 4, 1, 0),
+    ImprovedTouchStrip(PIN_TOUCH_SEND, SENSE2_PIN_RECEIVE, SENSE2_NUM_LEDS, DEFAULT_ACTIVE_COLOR, DEFAULT_INACTIVE_COLOR, 2, 4000, 4, 1, 0),
+    ImprovedTouchStrip(PIN_TOUCH_SEND, SENSE3_PIN_RECEIVE, SENSE3_NUM_LEDS, DEFAULT_ACTIVE_COLOR, DEFAULT_INACTIVE_COLOR, 2, 4000, 4, 1, 0),
+    ImprovedTouchStrip(PIN_TOUCH_SEND, SENSE4_PIN_RECEIVE, SENSE4_NUM_LEDS, DEFAULT_ACTIVE_COLOR, DEFAULT_INACTIVE_COLOR, 2, 4000, 4, 1, 0),
+};
+
+//TouchLedStrip touchLedStrips[]{
+//    TouchLedStrip(PIN_TOUCH_SEND, SENSE1_PIN_RECEIVE, SENSE1_PIN_LED, SENSE1_NUM_LEDS),
+//    TouchLedStrip(PIN_TOUCH_SEND, SENSE2_PIN_RECEIVE, SENSE2_PIN_LED, SENSE2_NUM_LEDS), 
+//    TouchLedStrip(PIN_TOUCH_SEND, SENSE3_PIN_RECEIVE, SENSE3_PIN_LED, SENSE3_NUM_LEDS), 
+//    TouchLedStrip(PIN_TOUCH_SEND, SENSE4_PIN_RECEIVE, SENSE4_PIN_LED, SENSE4_NUM_LEDS) };
 
 
 void setup()
@@ -338,34 +347,54 @@ void setup()
 #endif
 
     //ImprovedTouchStrip ngTouchStrip = ImprovedTouchStrip(PIN_TOUCH_SEND, SENSE1_PIN_RECEIVE );
-
-    for (int index = 0; index < sizeof(touchLedStrips)/sizeof(TouchLedStrip); index++) {
-        touchLedStrips[index].doSetup();
-        if (touchLedStrips[index].connected == true) {
-            // Workaround for the template
-            switch(touchLedStrips[index].ledPin) {
-                case SENSE1_PIN_LED:
-                    FastLED.addLeds<LED_TYPE, SENSE1_PIN_LED, COLOR_ORDER>(touchLedStrips[index].leds, touchLedStrips[index].numLeds); 
-                    break;
-                case SENSE2_PIN_LED:
-                    FastLED.addLeds<LED_TYPE, SENSE2_PIN_LED, COLOR_ORDER>(touchLedStrips[index].leds, touchLedStrips[index].numLeds); 
-                    break;
-                case SENSE3_PIN_LED:
-                    FastLED.addLeds<LED_TYPE, SENSE3_PIN_LED, COLOR_ORDER>(touchLedStrips[index].leds, touchLedStrips[index].numLeds); 
-                    break;
-                case SENSE4_PIN_LED:
-                    FastLED.addLeds<LED_TYPE, SENSE4_PIN_LED, COLOR_ORDER>(touchLedStrips[index].leds, touchLedStrips[index].numLeds); 
-                    break;
-            }
+    FastLED.addLeds<LED_TYPE, SENSE1_PIN_LED, COLOR_ORDER>(improvedTouchLeds[0].leds, improvedTouchLeds[0].numLeds); 
+    for (int index = 0; index < sizeof(improvedTouchLeds)/sizeof(ImprovedTouchStrip); index++) {
+        improvedTouchLeds[index].doSetup();
+        switch(improvedTouchLeds[index].sensor.sensePin) {
+            case SENSE1_PIN_RECEIVE:
+                FastLED.addLeds<LED_TYPE, SENSE1_PIN_LED, COLOR_ORDER>(improvedTouchLeds[index].leds, improvedTouchLeds[index].numLeds); 
+                break;
+            case SENSE2_PIN_RECEIVE:
+                FastLED.addLeds<LED_TYPE, SENSE2_PIN_LED, COLOR_ORDER>(improvedTouchLeds[index].leds, improvedTouchLeds[index].numLeds); 
+                break;
+            case SENSE3_PIN_RECEIVE:
+                FastLED.addLeds<LED_TYPE, SENSE3_PIN_LED, COLOR_ORDER>(improvedTouchLeds[index].leds, improvedTouchLeds[index].numLeds); 
+                break;
+            case SENSE4_PIN_RECEIVE:
+                FastLED.addLeds<LED_TYPE, SENSE4_PIN_LED, COLOR_ORDER>(improvedTouchLeds[index].leds, improvedTouchLeds[index].numLeds); 
+                break;
         }
     }
+
+    //for (int index = 0; index < sizeof(touchLedStrips)/sizeof(TouchLedStrip); index++) {
+    //    touchLedStrips[index].doSetup();
+    //    if (touchLedStrips[index].connected == true) {
+    //        // Workaround for the template
+    //        switch(touchLedStrips[index].ledPin) {
+    //            case SENSE1_PIN_LED:
+    //                FastLED.addLeds<LED_TYPE, SENSE1_PIN_LED, COLOR_ORDER>(touchLedStrips[index].leds, touchLedStrips[index].numLeds); 
+    //                break;
+    //            case SENSE2_PIN_LED:
+    //                FastLED.addLeds<LED_TYPE, SENSE2_PIN_LED, COLOR_ORDER>(touchLedStrips[index].leds, touchLedStrips[index].numLeds); 
+    //                break;
+    //            case SENSE3_PIN_LED:
+    //                FastLED.addLeds<LED_TYPE, SENSE3_PIN_LED, COLOR_ORDER>(touchLedStrips[index].leds, touchLedStrips[index].numLeds); 
+    //                break;
+    //            case SENSE4_PIN_LED:
+    //                FastLED.addLeds<LED_TYPE, SENSE4_PIN_LED, COLOR_ORDER>(touchLedStrips[index].leds, touchLedStrips[index].numLeds); 
+    //                break;
+    //        }
+    //    }
+    //}
     FastLED.setBrightness(DEFAULT_BRIGHTNESS);
 }
 
 void loop()
 {
-    for (int index = 0; index < sizeof(touchLedStrips)/sizeof(TouchLedStrip); index++) {
-        touchLedStrips[index].runCycle();
+    //for (int index = 0; index < sizeof(touchLedStrips)/sizeof(TouchLedStrip); index++) {
+    for (int index = 0; index < sizeof(improvedTouchLeds)/sizeof(ImprovedTouchStrip); index++) {
+    //    touchLedStrips[index].runCycle();
+        improvedTouchLeds[index].runCycle();
     }
    
     FastLED.show();
