@@ -16,29 +16,37 @@
  #define DEBUG_PRINTLN(x)
 #endif
 
-// WS2812B LED strips are used
-#define LED_TYPE WS2812B
-// WS2812B LED strips have GRB color order
-#define COLOR_ORDER GRB
-// TBD what is the range is 64 max?
-#define DEFAULT_BRIGHTNESS 64
+////////////////////////////////////////////////
+// TOUCH TREE config
+////////////////////////////////////////////////
+
+#define TOUCH_TREE_NUM_STRIPS 4
+
+#define TOUCH_TREE_LED_TYPE WS2812B             // WS2812B LED strips are used
+#define TOUCH_TREE_COLOR_ORDER GRB              // WS2812B LED strips have GRB color order
+#define TOUCH_TREE_DEFAULT_BRIGHTNESS 64        // TBD what is the range is 64 max?
+
+#define TOUCH_TREE_CYCLE_INTERVAL 40 // 41.666 == 24 update / sec
 
 // TBD this should be nicer
-#define MAX_NUM_LEDS    60
-#define SENSE1_NUM_LEDS 60
-#define SENSE2_NUM_LEDS 60
-#define SENSE3_NUM_LEDS 60
-#define SENSE4_NUM_LEDS 60
+#define TOUCH_TREE_MAX_NUM_LEDS    60
+#define TOUCH_TREE_SENSE1_NUM_LEDS 60
+#define TOUCH_TREE_SENSE2_NUM_LEDS 60
+#define TOUCH_TREE_SENSE3_NUM_LEDS 60
+#define TOUCH_TREE_SENSE4_NUM_LEDS 60
 
-#define PIN_TOUCH_SEND     4
-#define SENSE1_PIN_RECEIVE 5
-#define SENSE1_PIN_LED     6
-#define SENSE2_PIN_RECEIVE 7
-#define SENSE2_PIN_LED     8
-#define SENSE3_PIN_RECEIVE 9
-#define SENSE3_PIN_LED     10
-#define SENSE4_PIN_RECEIVE 10
-#define SENSE4_PIN_LED     11
+#define TOUCH_TREE_PIN_TOUCH_SEND     4
+#define TOUCH_TREE_SENSE1_PIN_RECEIVE 5
+#define TOUCH_TREE_SENSE1_PIN_LED     6
+#define TOUCH_TREE_SENSE2_PIN_RECEIVE 7
+#define TOUCH_TREE_SENSE2_PIN_LED     8
+#define TOUCH_TREE_SENSE3_PIN_RECEIVE 9
+#define TOUCH_TREE_SENSE3_PIN_LED     10
+#define TOUCH_TREE_SENSE4_PIN_RECEIVE 10
+#define TOUCH_TREE_SENSE4_PIN_LED     11
+
+#define TOUCH_TREE_DEFAULT_ACTIVE_COLOR    CHSV(0, 0, 255) // WHITE
+#define TOUCH_TREE_DEFAULT_INACTIVE_COLOR  CHSV(0, 0,  30) // DIMMED WHITE
 
 #define SENSE_MEASUREMENT_CYCLES 10
 
@@ -46,7 +54,6 @@
 #define SENSE_STORED_PER_LED_100 100
 #define DECREASE_SENSE_SPEED 400
 #define INCREASE_SENSE_SPEED 200
-#define CYCLE_INTERVAL 40 // 41.666 == 24 update / sec
 
 #define ENABLE_RETRY_INTERVAL 1000 // if sense for a strip is disabled check every 1000 ms if the sense still times out
 #define SENSE_DISABLE_TIMEOUT 2 // timeout for the measurement that disables the sense measurement for ENABLE_RETRY_INTERVAL
@@ -56,9 +63,6 @@
 #define MAX_LEDS_PER_STRIP    60
 #define MIN_RUNNER_START_INTERVAL_MS 200
 #define MAX_ACTIVE_RUNNERS 4
-
-#define DEFAULT_ACTIVE_COLOR    CHSV(0, 0, 255) // WHITE
-#define DEFAULT_INACTIVE_COLOR  CHSV(0, 0,  30) // DIMMED WHITE
 
 // lastCycle stores the end of the last cycle, so we can wait
 // wait that the next cycle will begin in CYCLE_INTERVAL 
@@ -177,7 +181,7 @@ struct Background{
     CHSV getLedColor(int ledIndex) { }
 };
 
-struct Runners {
+struct RunnerCluster {
     LedRunner runner[MAX_ACTIVE_RUNNERS];
 
     CHSV getLedSprite(int ledIndex) { }
@@ -209,8 +213,6 @@ struct ImprovedTouchStrip {
     
     long lastRunnerStartTime;
 
-    Runners runners;
-
     ImprovedTouchStrip(uint8_t sendPin, uint8_t sensePin, int numLeds, CHSV activeColor, CHSV inactiveColor, int ledActiveOffset, long allActiveTimeMs, long incSenseMsRatio, long decSenseMsRatio, long maxSenseOffset)
         : numLeds(numLeds),
           backColor(numLeds, activeColor, inactiveColor, ledActiveOffset, &cycleTimestamp), 
@@ -239,7 +241,9 @@ struct ImprovedTouchStrip {
         }
         for ( int i = 0; i < numLeds; i++ ) {
             CHSV ledBackColor = backColor.getLedColor(i);
-            CHSV ledSprite = runners.getLedSprite(i);
+            // MOA TBD renable again the runner
+            CHSV ledSprite = backColor.getLedColor(i);
+            //CHSV ledSprite = runners.getLedSprite(i);
             leds[i] = draw(ledBackColor, ledSprite); 
         }
     }
@@ -248,164 +252,81 @@ struct ImprovedTouchStrip {
     void doSetup() {}
 };
 
-struct TouchLedStrip {
-    bool connected;
-    const uint8_t sendPin;
-    const uint8_t sensePin;
-    const uint8_t ledPin;
-    const uint8_t numLeds;
-    CRGB activeBackColor = CRGB::White;
-    CRGB inactiveBackColor = CRGB::Black;
-    CRGB runnerColor = CRGB::Blue;
+struct TouchTree {
+    long currentTimestamp;
+    long lastCycleTimestamp;
 
-    CapacitiveSensor sensor;
-    CRGB             leds[MAX_NUM_LEDS];
-
-    long startTime;
-    long accSense;
-    int curRunner;
-
-    unsigned long binaryUpdate;
-    unsigned long ledUpdate;
-
-    TouchLedStrip(int sendPin, int sensePin, int ledPin, int numLeds) : sendPin(sendPin), sensePin(sensePin), ledPin(ledPin),numLeds(numLeds), sensor(sendPin,sensePin) { }
-    void doSetup() { 
-        sensor.set_CS_AutocaL_Millis(0xFFFFFFFF);
+    ImprovedTouchStrip improvedTouchLeds[TOUCH_TREE_NUM_STRIPS];
+    RunnerCluster      runnerCluster;
+    
+    TouchTree()
+        :improvedTouchLeds({
+            ImprovedTouchStrip(TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE1_PIN_RECEIVE, TOUCH_TREE_SENSE1_NUM_LEDS, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 2, 4000, 4, 1, 0),
+            ImprovedTouchStrip(TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE2_PIN_RECEIVE, TOUCH_TREE_SENSE2_NUM_LEDS, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 2, 4000, 4, 1, 0),
+            ImprovedTouchStrip(TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE3_PIN_RECEIVE, TOUCH_TREE_SENSE3_NUM_LEDS, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 2, 4000, 4, 1, 0),
+            ImprovedTouchStrip(TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE4_PIN_RECEIVE, TOUCH_TREE_SENSE4_NUM_LEDS, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 2, 4000, 4, 1, 0),
+        }),
+        runnerCluster() {
     }
-    long sense() { return sensor.capacitiveSensor(SENSE_MEASUREMENT_CYCLES); }
-    CRGB backColor(int ledIndex) {
-        int toggleLed = accSense / SENSE_STORED_PER_LED;
-        if (toggleLed > ledIndex) {
-            return activeBackColor;
-        } else if (toggleLed < ledIndex ){
-            return fade(inactiveBackColor, activeBackColor, 2);
-        } else {
-            int senseRest = accSense % SENSE_STORED_PER_LED;
-            if ( senseRest == 0 ) {
-            return fade(inactiveBackColor, activeBackColor, 2);
+
+    void setup() {
+        for (int index = 0; index < sizeof(improvedTouchLeds)/sizeof(ImprovedTouchStrip); index++) {
+            improvedTouchLeds[index].doSetup();
+            // setup the led pins that control the led strips, based on the sense led pin
+            switch(improvedTouchLeds[index].sensor.sensePin) {
+                case TOUCH_TREE_SENSE1_PIN_RECEIVE:
+                    FastLED.addLeds<TOUCH_TREE_LED_TYPE, TOUCH_TREE_SENSE1_PIN_LED, TOUCH_TREE_COLOR_ORDER>(improvedTouchLeds[index].leds, improvedTouchLeds[index].numLeds); 
+                    break;
+                case TOUCH_TREE_SENSE2_PIN_RECEIVE:
+                    FastLED.addLeds<TOUCH_TREE_LED_TYPE, TOUCH_TREE_SENSE2_PIN_LED, TOUCH_TREE_COLOR_ORDER>(improvedTouchLeds[index].leds, improvedTouchLeds[index].numLeds); 
+                    break;
+                case TOUCH_TREE_SENSE3_PIN_RECEIVE:
+                    FastLED.addLeds<TOUCH_TREE_LED_TYPE, TOUCH_TREE_SENSE3_PIN_LED, TOUCH_TREE_COLOR_ORDER>(improvedTouchLeds[index].leds, improvedTouchLeds[index].numLeds); 
+                    break;
+                case TOUCH_TREE_SENSE4_PIN_RECEIVE:
+                    FastLED.addLeds<TOUCH_TREE_LED_TYPE, TOUCH_TREE_SENSE4_PIN_LED, TOUCH_TREE_COLOR_ORDER>(improvedTouchLeds[index].leds, improvedTouchLeds[index].numLeds); 
+                    break;
+                default:
+                    DEBUG_PRINTLN("ERROR: led pin strip unknown touch pin");
             }
-            int colorPercent = senseRest / SENSE_STORED_PER_LED_100;
-            return fade(inactiveBackColor, activeBackColor, colorPercent);
         }
+
+        // TBD not sure about this
+        FastLED.setBrightness(TOUCH_TREE_DEFAULT_BRIGHTNESS);
     }
-    void runCycle() {
-        if (connected == false) {
-            return;
+
+    void loop() {
+        currentTimestamp = millis();
+        for (int index = 0; index < TOUCH_TREE_NUM_STRIPS; index++) {
+            improvedTouchLeds[index].runCycle();
         }
-        // Process the sense event
-        int senseVal = sense();
-        if ( senseVal < 1000 && senseVal > -1000) {
-            curRunner = 0;
-            // TBD let is slowly the accSense decrease
-            if ( accSense < DECREASE_SENSE_SPEED ) {
-                accSense = 0;
-            } else {
-                accSense -= DECREASE_SENSE_SPEED;
-            }
-            startTime = 0;
-        } else {
-            if (curRunner < numLeds * 2) {
-              curRunner++;
-            } else {
-              curRunner = 0;
-            }
-            curRunner++;
-            accSense += INCREASE_SENSE_SPEED;
-            if ( startTime == 0 ) {
-                startTime = millis();
-            } 
+       
+        FastLED.show();
+        
+        long timeRemain = (lastCycleTimestamp + TOUCH_TREE_CYCLE_INTERVAL) - millis();
+        if (timeRemain > 0) {
+            delay(timeRemain);
         }
-        for ( int i = 0; i < numLeds; i++ ) {
-            CRGB bg = backColor(i);
-            if ( curRunner / 2 == i  || (curRunner / 2) + 1 == i) {
-              leds[i] = runnerColor;
-            } else {
-              leds[i] = bg;              
-            }
-        }
-    }
+
+        DEBUG_PRINT("timeRemain: ");
+        DEBUG_PRINTDEC(timeRemain);
+        DEBUG_PRINTLN("");
+        lastCycleTimestamp = millis();
+    };
 };
 
-ImprovedTouchStrip improvedTouchLeds[] {
-    ImprovedTouchStrip(PIN_TOUCH_SEND, SENSE1_PIN_RECEIVE, SENSE1_NUM_LEDS, DEFAULT_ACTIVE_COLOR, DEFAULT_INACTIVE_COLOR, 2, 4000, 4, 1, 0),
-    ImprovedTouchStrip(PIN_TOUCH_SEND, SENSE2_PIN_RECEIVE, SENSE2_NUM_LEDS, DEFAULT_ACTIVE_COLOR, DEFAULT_INACTIVE_COLOR, 2, 4000, 4, 1, 0),
-    ImprovedTouchStrip(PIN_TOUCH_SEND, SENSE3_PIN_RECEIVE, SENSE3_NUM_LEDS, DEFAULT_ACTIVE_COLOR, DEFAULT_INACTIVE_COLOR, 2, 4000, 4, 1, 0),
-    ImprovedTouchStrip(PIN_TOUCH_SEND, SENSE4_PIN_RECEIVE, SENSE4_NUM_LEDS, DEFAULT_ACTIVE_COLOR, DEFAULT_INACTIVE_COLOR, 2, 4000, 4, 1, 0),
-};
-
-//TouchLedStrip touchLedStrips[]{
-//    TouchLedStrip(PIN_TOUCH_SEND, SENSE1_PIN_RECEIVE, SENSE1_PIN_LED, SENSE1_NUM_LEDS),
-//    TouchLedStrip(PIN_TOUCH_SEND, SENSE2_PIN_RECEIVE, SENSE2_PIN_LED, SENSE2_NUM_LEDS), 
-//    TouchLedStrip(PIN_TOUCH_SEND, SENSE3_PIN_RECEIVE, SENSE3_PIN_LED, SENSE3_NUM_LEDS), 
-//    TouchLedStrip(PIN_TOUCH_SEND, SENSE4_PIN_RECEIVE, SENSE4_PIN_LED, SENSE4_NUM_LEDS) };
-
+TouchTree touchTree;
 
 void setup()
 {
 #if DEBUG
     Serial.begin(9600);
 #endif
-
-    //ImprovedTouchStrip ngTouchStrip = ImprovedTouchStrip(PIN_TOUCH_SEND, SENSE1_PIN_RECEIVE );
-    FastLED.addLeds<LED_TYPE, SENSE1_PIN_LED, COLOR_ORDER>(improvedTouchLeds[0].leds, improvedTouchLeds[0].numLeds); 
-    for (int index = 0; index < sizeof(improvedTouchLeds)/sizeof(ImprovedTouchStrip); index++) {
-        improvedTouchLeds[index].doSetup();
-        switch(improvedTouchLeds[index].sensor.sensePin) {
-            case SENSE1_PIN_RECEIVE:
-                FastLED.addLeds<LED_TYPE, SENSE1_PIN_LED, COLOR_ORDER>(improvedTouchLeds[index].leds, improvedTouchLeds[index].numLeds); 
-                break;
-            case SENSE2_PIN_RECEIVE:
-                FastLED.addLeds<LED_TYPE, SENSE2_PIN_LED, COLOR_ORDER>(improvedTouchLeds[index].leds, improvedTouchLeds[index].numLeds); 
-                break;
-            case SENSE3_PIN_RECEIVE:
-                FastLED.addLeds<LED_TYPE, SENSE3_PIN_LED, COLOR_ORDER>(improvedTouchLeds[index].leds, improvedTouchLeds[index].numLeds); 
-                break;
-            case SENSE4_PIN_RECEIVE:
-                FastLED.addLeds<LED_TYPE, SENSE4_PIN_LED, COLOR_ORDER>(improvedTouchLeds[index].leds, improvedTouchLeds[index].numLeds); 
-                break;
-        }
-    }
-
-    //for (int index = 0; index < sizeof(touchLedStrips)/sizeof(TouchLedStrip); index++) {
-    //    touchLedStrips[index].doSetup();
-    //    if (touchLedStrips[index].connected == true) {
-    //        // Workaround for the template
-    //        switch(touchLedStrips[index].ledPin) {
-    //            case SENSE1_PIN_LED:
-    //                FastLED.addLeds<LED_TYPE, SENSE1_PIN_LED, COLOR_ORDER>(touchLedStrips[index].leds, touchLedStrips[index].numLeds); 
-    //                break;
-    //            case SENSE2_PIN_LED:
-    //                FastLED.addLeds<LED_TYPE, SENSE2_PIN_LED, COLOR_ORDER>(touchLedStrips[index].leds, touchLedStrips[index].numLeds); 
-    //                break;
-    //            case SENSE3_PIN_LED:
-    //                FastLED.addLeds<LED_TYPE, SENSE3_PIN_LED, COLOR_ORDER>(touchLedStrips[index].leds, touchLedStrips[index].numLeds); 
-    //                break;
-    //            case SENSE4_PIN_LED:
-    //                FastLED.addLeds<LED_TYPE, SENSE4_PIN_LED, COLOR_ORDER>(touchLedStrips[index].leds, touchLedStrips[index].numLeds); 
-    //                break;
-    //        }
-    //    }
-    //}
-    FastLED.setBrightness(DEFAULT_BRIGHTNESS);
+    touchTree.setup();
 }
 
 void loop()
 {
-    //for (int index = 0; index < sizeof(touchLedStrips)/sizeof(TouchLedStrip); index++) {
-    for (int index = 0; index < sizeof(improvedTouchLeds)/sizeof(ImprovedTouchStrip); index++) {
-    //    touchLedStrips[index].runCycle();
-        improvedTouchLeds[index].runCycle();
-    }
-   
-    FastLED.show();
-    
-    long timeRemain = (lastCycle + CYCLE_INTERVAL) - millis();
-    if (timeRemain > 0) {
-        delay(timeRemain);
-    }
-    DEBUG_PRINT("timeRemain: ");
-    DEBUG_PRINTDEC(timeRemain);
-    DEBUG_PRINTLN("");
-    lastCycle = millis();
+    touchTree.loop();
 }
 
