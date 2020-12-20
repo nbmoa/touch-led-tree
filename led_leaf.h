@@ -1,3 +1,5 @@
+#define LED_LEAF_MAX_LEDS_PER_STRIP    60
+#define LED_LEAF_MIN_RUNNER_START_INTERVAL_MS 200
 #define LED_LEAF_DEFAULT_RUNNER_SPEED_MS 10000 
 #define LED_LEAF_DEFAULT_RUNNER_COLOR CHSV(32,255,255)
 #define LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE 1
@@ -14,7 +16,7 @@ struct LedLeaf {
     
     long lastRunnerStartTime;
 
-    CRGB leds[MAX_LEDS_PER_STRIP];
+    CRGB leds[LED_LEAF_MAX_LEDS_PER_STRIP];
 
     RunnerCluster   *runnerCluster;
     SenseSensor     sensor;

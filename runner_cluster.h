@@ -1,3 +1,4 @@
+#define RUNNER_CLUSTER_MAX_ACTIVE_RUNNERS 4
 
 struct RunnerCluster {
     LedRunner runner[RUNNER_CLUSTER_MAX_ACTIVE_RUNNERS];

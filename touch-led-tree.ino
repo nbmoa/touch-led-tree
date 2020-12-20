@@ -1,36 +1,12 @@
-#include <CapacitiveSensor.h>
 
+//#define DEBUG 1
+
+#include <CapacitiveSensor.h>
 // This suppress the pragma warning of FastLED (see https://github.com/FastLED/FastLED/issues/797)
 #define FASTLED_INTERNAL
 #include "FastLED.h"
 
-//#define DEBUG 1
-
-#ifdef DEBUG
- #define DEBUG_PRINT(x)  Serial.print (x)
- #define DEBUG_PRINTDEC(x)  Serial.print (x, DEC)
- #define DEBUG_PRINTLN(x)  Serial.println (x)
-#else
- #define DEBUG_PRINT(x)
- #define DEBUG_PRINTDEC(x)
- #define DEBUG_PRINTLN(x)
-#endif
-
-////////////////////////////////////////////////
-// TOUCH TREE config
-////////////////////////////////////////////////
-
-#define SENSE_STORED_PER_LED 10000
-#define SENSE_STORED_PER_LED_100 100
-#define DECREASE_SENSE_SPEED 400
-#define INCREASE_SENSE_SPEED 200
-
-#define MAX_LEDS_PER_STRIP    60
-#define LED_LEAF_MIN_RUNNER_START_INTERVAL_MS 200
-#define RUNNER_CLUSTER_MAX_ACTIVE_RUNNERS 4
-
-long cycleTimestamp;
-
+#include "debug.h"
 #include "sense_sensor.h"
 #include "led_runner.h"
 #include "runner_cluster.h"
@@ -43,6 +19,10 @@ long cycleTimestamp;
 // Main defines
 ///////////////////////////////////////////////////////////
 
+// cycle timestamp (global var because its used in many places
+long cycleTimestamp;
+
+// defined globaly so it will be a static struct
 TouchTree touchTree;
 
 void setup()
@@ -57,6 +37,8 @@ void loop()
 {
     touchTree.loop();
 }
+
+///////////////////////////////////////////////////////////
 
 ///////////////////////////////////////////////////////////
 // TouchTree
@@ -154,7 +136,7 @@ LedLeaf::LedLeaf(uint8_t stripID,
       runnerCluster(runnerCluster),
       sensor(sendPin, sensePin),
       senseFilling(incSenseMsRatio, decSenseMsRatio, allActiveTimeMs + maxSenseOffset),
-      background(numLeds, backgroundActiveColor, backgroundInactiveColor, backgroundSenseLedOffset) {}
+      background(backgroundActiveColor, backgroundInactiveColor, allActiveTimeMs / numLeds) {}
 
 void LedLeaf::runCycle(){
     // Read in the sensor
@@ -180,11 +162,24 @@ void LedLeaf::doSetup() {}
 // Background
 ///////////////////////////////////////////////////////////
 
-Background::Background(int numLeds, CHSV activeColor, CHSV inactiveColor, int ledActiveOffset)
-    : numLeds(numLeds), ledActiveOffset(ledActiveOffset), activeColor(activeColor), inactiveColor(inactiveColor) {
-    }
+Background::Background(CHSV activeColor,
+                       CHSV inactiveColor,
+                       long sensePerLed)
+    : activeColor(activeColor),
+      inactiveColor(inactiveColor),
+      sensePerLed(sensePerLed) {
+}
 
 CHSV Background::getLedBackColor(int ledIndex, long senseValue) {
+    long ledSenseValue = ledIndex * sensePerLed;
+    if ( ledSenseValue < senseValue ) {
+        return inactiveColor; 
+    }
+    if ( ledSenseValue + sensePerLed >= senseValue ) {
+        return activeColor;
+    }
+    int activePercent = 100 * (senseValue - ledSenseValue) / sensePerLed;
+    return fade(inactiveColor, activeColor, activePercent);
 }
 
 ///////////////////////////////////////////////////////////
@@ -330,6 +325,14 @@ bool SenseSensor::sense() {
 ///////////////////////////////////////////////////////////
 // Helpers
 ///////////////////////////////////////////////////////////
+
+CHSV fade(CHSV from, CHSV to, int percent) {
+    CHSV result;
+    result.h = from.h + ((to.h - from.h) / 100) * percent;
+    result.s = from.s + ((to.s - from.s) / 100) * percent;
+    result.v = from.v + ((to.v - from.v) / 100) * percent;
+    return result;
+}
 
 CHSV overlaySprites(CHSV s1, CHSV s2) {
     CHSV result;
