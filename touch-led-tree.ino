@@ -54,7 +54,7 @@
 #define INCREASE_SENSE_SPEED 200
 
 #define MAX_LEDS_PER_STRIP    60
-#define MIN_RUNNER_START_INTERVAL_MS 200
+#define LED_LEAF_MIN_RUNNER_START_INTERVAL_MS 200
 #define RUNNER_CLUSTER_MAX_ACTIVE_RUNNERS 4
 
 long cycleTimestamp;
@@ -255,10 +255,26 @@ struct SenseFilling {
             }
         }
     }
-
+    long getCurrentSense() {
+        return accumulatedSense;
+    }
     CHSV getLedBackColor(int ledIndex) { }
 };
 
+struct Background {
+    CHSV getLedBackColor(int ledIndex, long senseValue) {
+    }
+};
+
+///////////////////////////////////////////////////////////
+// LedLeaf
+///////////////////////////////////////////////////////////
+
+#define LED_LEAF_DEFAULT_RUNNER_SPEED_MS 10000 
+#define LED_LEAF_DEFAULT_RUNNER_COLOR CHSV(32,255,255)
+#define LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE 1
+#define LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE_INTERVAL_MS 40
+#define LED_LEAF_DEFAULT_RUNNER_GLOWTIME_MS 3000
 struct LedLeaf {
     uint8_t stripID;
     int numLeds;         // Number of leds of the strip
@@ -269,9 +285,10 @@ struct LedLeaf {
     long baseRunnerTime;
     long runnerTimeDiff;
 
-    SenseSensor sensor;
-    SenseFilling senseFilling;
-    RunnerCluster *runnerCluster;
+    SenseSensor     sensor;
+    SenseFilling    senseFilling;
+    RunnerCluster   *runnerCluster;
+    Background      background;
     bool previousSense;
 
     long curSense;           // stores the current sense value of the led strip
@@ -286,43 +303,47 @@ struct LedLeaf {
     
     long lastRunnerStartTime;
 
-    LedLeaf(RunnerCluster *runnerCluster,uint8_t stripID, uint8_t sendPin, uint8_t sensePin, int numLeds, CHSV activeColor, CHSV inactiveColor, int ledActiveOffset, long allActiveTimeMs, uint8_t incSenseMsRatio, uint8_t decSenseMsRatio, long maxSenseOffset)
-        : stripID(stripID),
-          runnerCluster(runnerCluster),
-          numLeds(numLeds),
-          senseFilling(numLeds, activeColor, inactiveColor, ledActiveOffset, incSenseMsRatio, decSenseMsRatio), 
-          sensor(sendPin, sensePin),
-          curSense(0),
-          allActiveTimeMs(allActiveTimeMs), 
-          incSenseMsRatio(incSenseMsRatio), 
-          decSenseMsRatio(decSenseMsRatio), 
-          allActiveSense(allActiveTimeMs * incSenseMsRatio), 
-          maxSense(allActiveTimeMs * incSenseMsRatio + maxSenseOffset) { }
+    LedLeaf(RunnerCluster *runnerCluster,uint8_t stripID, uint8_t sendPin, uint8_t sensePin, int numLeds, CHSV activeColor, CHSV inactiveColor, int ledActiveOffset, long allActiveTimeMs, uint8_t incSenseMsRatio, uint8_t decSenseMsRatio, long maxSenseOffset);
+    void runCycle();
+    void doSetup();
+};
+    
+LedLeaf::LedLeaf(RunnerCluster *runnerCluster,uint8_t stripID, uint8_t sendPin, uint8_t sensePin, int numLeds, CHSV activeColor, CHSV inactiveColor, int ledActiveOffset, long allActiveTimeMs, uint8_t incSenseMsRatio, uint8_t decSenseMsRatio, long maxSenseOffset)
+    : stripID(stripID),
+      runnerCluster(runnerCluster),
+      numLeds(numLeds),
+      senseFilling(numLeds, activeColor, inactiveColor, ledActiveOffset, incSenseMsRatio, decSenseMsRatio), 
+      sensor(sendPin, sensePin),
+      curSense(0),
+      allActiveTimeMs(allActiveTimeMs), 
+      incSenseMsRatio(incSenseMsRatio), 
+      decSenseMsRatio(decSenseMsRatio), 
+      allActiveSense(allActiveTimeMs * incSenseMsRatio), 
+      maxSense(allActiveTimeMs * incSenseMsRatio + maxSenseOffset) { }
 
-    void runCycle(){
-        // First update the timestamp
-        long lastCycleTimestamp = cycleTimestamp;
-        cycleTimestamp = millis();
-
-        // Read in the sensor
-        bool sensed =  sensor.sense();
-        senseFilling.calculateCycle(sensed);
-        if ( sensed == true && previousSense == false ) {
-            //try to start a new runner
-            if ( cycleTimestamp - lastRunnerStartTime > MIN_RUNNER_START_INTERVAL_MS ) {
-                tryStartRunner();                
-            }
-        }
-        for ( int i = 0; i < numLeds; i++ ) {
-            CHSV ledBackColor = senseFilling.getLedBackColor(i);
-            CHSV ledSprite = runnerCluster->getLedSprite(stripID, i);
-            leds[i] = draw(ledBackColor, ledSprite); 
+void LedLeaf::runCycle(){
+    // Read in the sensor
+    bool sensed =  sensor.sense();
+    senseFilling.calculateCycle(sensed);
+    if ( sensed == true && previousSense == false ) {
+        //try to start a new runner
+        if ( cycleTimestamp - lastRunnerStartTime > LED_LEAF_MIN_RUNNER_START_INTERVAL_MS ) {
+            runnerCluster->triggerRunner(stripID, numLeds, LED_LEAF_DEFAULT_RUNNER_SPEED_MS, LED_LEAF_DEFAULT_RUNNER_COLOR, LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE, LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE_INTERVAL_MS, LED_LEAF_DEFAULT_RUNNER_GLOWTIME_MS);                
         }
     }
-    void tryStartRunner() {}
-    CHSV plotRunner(int ledIndex) {}
-    void doSetup() {}
-};
+    for ( int i = 0; i < numLeds; i++ ) {
+        CHSV ledBackColor = background.getLedBackColor(i, senseFilling.getCurrentSense());
+        CHSV ledSprite = runnerCluster->getLedSprite(stripID, i);
+        leds[i] = draw(ledBackColor, ledSprite); 
+    }
+}
+void LedLeaf::doSetup() {}
+
+///////////////////////////////////////////////////////////
+
+///////////////////////////////////////////////////////////
+// TouchTree
+///////////////////////////////////////////////////////////
 
 struct TouchTree {
     long currentTimestamp;
@@ -331,64 +352,78 @@ struct TouchTree {
     RunnerCluster      runnerCluster;
     LedLeaf ledLeaf[TOUCH_TREE_NUM_STRIPS];
     
-    TouchTree()
-        :ledLeaf({
-            LedLeaf(&this->runnerCluster, 1, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE1_PIN_RECEIVE, TOUCH_TREE_SENSE1_NUM_LEDS, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 2, 4000, 4, 1, 0),
-            LedLeaf(&this->runnerCluster, 2, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE2_PIN_RECEIVE, TOUCH_TREE_SENSE2_NUM_LEDS, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 2, 4000, 4, 1, 0),
-            LedLeaf(&this->runnerCluster, 3, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE3_PIN_RECEIVE, TOUCH_TREE_SENSE3_NUM_LEDS, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 2, 4000, 4, 1, 0),
-            LedLeaf(&this->runnerCluster, 4, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE4_PIN_RECEIVE, TOUCH_TREE_SENSE4_NUM_LEDS, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 2, 4000, 4, 1, 0),
-        }),
-        runnerCluster() {
-    }
-
-    void setup() {
-        for (int index = 0; index < TOUCH_TREE_NUM_STRIPS; index++) {
-            ledLeaf[index].doSetup();
-            // setup the led pins that control the led strips, based on the sense led pin
-            switch(ledLeaf[index].sensor.sensePin) {
-                case TOUCH_TREE_SENSE1_PIN_RECEIVE:
-                    FastLED.addLeds<TOUCH_TREE_LED_TYPE, TOUCH_TREE_SENSE1_PIN_LED, TOUCH_TREE_COLOR_ORDER>(ledLeaf[index].leds, ledLeaf[index].numLeds); 
-                    break;
-                case TOUCH_TREE_SENSE2_PIN_RECEIVE:
-                    FastLED.addLeds<TOUCH_TREE_LED_TYPE, TOUCH_TREE_SENSE2_PIN_LED, TOUCH_TREE_COLOR_ORDER>(ledLeaf[index].leds, ledLeaf[index].numLeds); 
-                    break;
-                case TOUCH_TREE_SENSE3_PIN_RECEIVE:
-                    FastLED.addLeds<TOUCH_TREE_LED_TYPE, TOUCH_TREE_SENSE3_PIN_LED, TOUCH_TREE_COLOR_ORDER>(ledLeaf[index].leds, ledLeaf[index].numLeds); 
-                    break;
-                case TOUCH_TREE_SENSE4_PIN_RECEIVE:
-                    FastLED.addLeds<TOUCH_TREE_LED_TYPE, TOUCH_TREE_SENSE4_PIN_LED, TOUCH_TREE_COLOR_ORDER>(ledLeaf[index].leds, ledLeaf[index].numLeds); 
-                    break;
-                default:
-                    DEBUG_PRINTLN("ERROR: led pin strip unknown touch pin");
-            }
-        }
-
-        // TBD not sure about this
-        FastLED.setBrightness(TOUCH_TREE_DEFAULT_BRIGHTNESS);
-    }
-
-    void loop() {
-        currentTimestamp = millis();
-        // Update the runners
-        runnerCluster.update();
-
-        for (int index = 0; index < TOUCH_TREE_NUM_STRIPS; index++) {
-            ledLeaf[index].runCycle();
-        }
-       
-        FastLED.show();
-        
-        long timeRemain = (lastCycleTimestamp + TOUCH_TREE_CYCLE_INTERVAL) - millis();
-        if (timeRemain > 0) {
-            delay(timeRemain);
-        }
-
-        DEBUG_PRINT("timeRemain: ");
-        DEBUG_PRINTDEC(timeRemain);
-        DEBUG_PRINTLN("");
-        lastCycleTimestamp = millis();
-    };
+    TouchTree();
+    void setup();
+    void loop(); 
 };
+    
+TouchTree::TouchTree()
+    :ledLeaf({
+        LedLeaf(&this->runnerCluster, 1, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE1_PIN_RECEIVE, TOUCH_TREE_SENSE1_NUM_LEDS, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 2, 4000, 4, 1, 0),
+        LedLeaf(&this->runnerCluster, 2, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE2_PIN_RECEIVE, TOUCH_TREE_SENSE2_NUM_LEDS, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 2, 4000, 4, 1, 0),
+        LedLeaf(&this->runnerCluster, 3, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE3_PIN_RECEIVE, TOUCH_TREE_SENSE3_NUM_LEDS, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 2, 4000, 4, 1, 0),
+        LedLeaf(&this->runnerCluster, 4, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE4_PIN_RECEIVE, TOUCH_TREE_SENSE4_NUM_LEDS, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 2, 4000, 4, 1, 0),
+    }),
+    runnerCluster() {
+}
+
+void TouchTree::setup() {
+    for (int index = 0; index < TOUCH_TREE_NUM_STRIPS; index++) {
+        ledLeaf[index].doSetup();
+        // setup the led pins that control the led strips, based on the sense led pin
+        switch(ledLeaf[index].sensor.sensePin) {
+            case TOUCH_TREE_SENSE1_PIN_RECEIVE:
+                FastLED.addLeds<TOUCH_TREE_LED_TYPE, TOUCH_TREE_SENSE1_PIN_LED, TOUCH_TREE_COLOR_ORDER>(ledLeaf[index].leds, ledLeaf[index].numLeds); 
+                break;
+            case TOUCH_TREE_SENSE2_PIN_RECEIVE:
+                FastLED.addLeds<TOUCH_TREE_LED_TYPE, TOUCH_TREE_SENSE2_PIN_LED, TOUCH_TREE_COLOR_ORDER>(ledLeaf[index].leds, ledLeaf[index].numLeds); 
+                break;
+            case TOUCH_TREE_SENSE3_PIN_RECEIVE:
+                FastLED.addLeds<TOUCH_TREE_LED_TYPE, TOUCH_TREE_SENSE3_PIN_LED, TOUCH_TREE_COLOR_ORDER>(ledLeaf[index].leds, ledLeaf[index].numLeds); 
+                break;
+            case TOUCH_TREE_SENSE4_PIN_RECEIVE:
+                FastLED.addLeds<TOUCH_TREE_LED_TYPE, TOUCH_TREE_SENSE4_PIN_LED, TOUCH_TREE_COLOR_ORDER>(ledLeaf[index].leds, ledLeaf[index].numLeds); 
+                break;
+            default:
+                DEBUG_PRINTLN("ERROR: led pin strip unknown touch pin");
+        }
+    }
+
+    // TBD not sure about this
+    FastLED.setBrightness(TOUCH_TREE_DEFAULT_BRIGHTNESS);
+}
+
+void TouchTree::loop() {
+    // First update the timestamp
+    long lastCycleTimestamp = cycleTimestamp;
+    cycleTimestamp = millis();
+
+    // Update the runners
+    runnerCluster.update();
+
+    for (int index = 0; index < TOUCH_TREE_NUM_STRIPS; index++) {
+        ledLeaf[index].runCycle();
+    }
+   
+    FastLED.show();
+    
+    long timeRemain = (lastCycleTimestamp + TOUCH_TREE_CYCLE_INTERVAL) - millis();
+    if (timeRemain > 0) {
+        delay(timeRemain);
+    }
+
+    DEBUG_PRINT("timeRemain: ");
+    DEBUG_PRINTDEC(timeRemain);
+    DEBUG_PRINTLN("");
+    lastCycleTimestamp = millis();
+};
+
+///////////////////////////////////////////////////////////
+
+
+///////////////////////////////////////////////////////////
+// Main defines
+///////////////////////////////////////////////////////////
 
 TouchTree touchTree;
 
