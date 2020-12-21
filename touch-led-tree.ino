@@ -11,7 +11,7 @@
 #include "led_runner.h"
 #include "runner_cluster.h"
 #include "background.h"
-#include "sense_filling.h"
+#include "stored_time.h"
 #include "led_leaf.h"
 #include "touch_tree.h"
 
@@ -46,10 +46,10 @@ void loop()
     
 TouchTree::TouchTree()
     :ledLeaf({
-        LedLeaf(1, TOUCH_TREE_SENSE1_NUM_LEDS, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE1_PIN_RECEIVE, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 0, 4000, 1, 1, 0, CHSV(32,255,255), 1000, 0, &this->runnerCluster),
-        LedLeaf(2, TOUCH_TREE_SENSE2_NUM_LEDS, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE2_PIN_RECEIVE, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 0, 6000, 2, 1, 0, CHSV(64,255,255), 500, 0, &this->runnerCluster),
-        LedLeaf(3, TOUCH_TREE_SENSE3_NUM_LEDS, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE3_PIN_RECEIVE, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 0, 5000, 1, 2, 0, CHSV(96,255,255), 700, 0, &this->runnerCluster),
-        LedLeaf(4, TOUCH_TREE_SENSE4_NUM_LEDS, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE4_PIN_RECEIVE, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 0, 10000, 1, 1, 0, CHSV(128,255,255), 300, 0, &this->runnerCluster),
+        LedLeaf(1, TOUCH_TREE_SENSE1_NUM_LEDS, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE1_PIN_RECEIVE, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 1000, 2000, 10000, 1, 1, CHSV(32,255,255), 1000, 0, &this->runnerCluster),
+        LedLeaf(2, TOUCH_TREE_SENSE2_NUM_LEDS, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE2_PIN_RECEIVE, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 2000, 2000, 20000, 1, 2, CHSV(64,255,255), 500, 0, &this->runnerCluster),
+        LedLeaf(3, TOUCH_TREE_SENSE3_NUM_LEDS, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE3_PIN_RECEIVE, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 1500, 750, 10000, 2, 1, CHSV(96,255,255), 700, 0, &this->runnerCluster),
+        LedLeaf(4, TOUCH_TREE_SENSE4_NUM_LEDS, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE4_PIN_RECEIVE, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 750, 1000, 10000, 1, 1, CHSV(128,255,255), 300, 0, &this->runnerCluster),
     }),
     runnerCluster() {
 }
@@ -99,9 +99,7 @@ void TouchTree::loop() {
         delay(timeRemain);
     }
 
-    DEBUG_PRINT("timeRemain: ");
-    DEBUG_PRINTDEC(timeRemain);
-    DEBUG_PRINTLN("");
+    DEBUG_PRINTDECLN("timeRemain: ", timeRemain);
     lastCycleTimestamp = millis();
 };
 
@@ -111,22 +109,22 @@ void TouchTree::loop() {
 // LedLeaf
 ///////////////////////////////////////////////////////////
     
-LedLeaf::LedLeaf(uint8_t stripID,
+LedLeaf::LedLeaf(uint8_t leafID,
                  int     numLeds,
                  uint8_t sendPin,
                  uint8_t sensePin,
                  CHSV    backgroundActiveColor,
                  CHSV    backgroundInactiveColor,
-                 int     backgroundSenseLedOffset,
-                 long    allActiveTimeMs,
-                 uint8_t incSenseMsRatio,
-                 uint8_t decSenseMsRatio,
-                 long    maxSenseOffset,
+                 long    timePerLed,
+                 long    timeMinStored,
+                 long    timeMaxStoredOffset,
+                 uint8_t timeIncRatio,
+                 uint8_t timeDecRatio,
                  CHSV    runnerColor,
                  long    runnerBaseTime,
                  long    runnerDiffTime,
                  RunnerCluster *runnerCluster)
-    : stripID(stripID),
+    : leafID(leafID),
       numLeds(numLeds),
       runnerColor(runnerColor),
       runnerBaseTime(runnerBaseTime),
@@ -135,32 +133,36 @@ LedLeaf::LedLeaf(uint8_t stripID,
       lastRunnerStartTime(0),
       runnerCluster(runnerCluster),
       sensor(sendPin, sensePin),
-      senseFilling(incSenseMsRatio, decSenseMsRatio, allActiveTimeMs + maxSenseOffset),
-      background(backgroundActiveColor, backgroundInactiveColor, allActiveTimeMs / numLeds) {}
+      storedTime(timeIncRatio, timeDecRatio, timeMinStored, (numLeds * timePerLed) + timeMaxStoredOffset),
+      background(backgroundActiveColor, backgroundInactiveColor, timePerLed) {}
 
 void LedLeaf::runCycle(){
     // Read in the sensor
     bool sensed =  sensor.sense();
-    senseFilling.calculateCycle(sensed);
+    storedTime.runCycle(sensed);
     if ( sensed == true && previousSenseState == false ) {
         //try to start a new runner
         if ( cycleTimestamp - lastRunnerStartTime > LED_LEAF_MIN_RUNNER_START_INTERVAL_MS ) {
-            runnerCluster->triggerRunner(stripID, numLeds, LED_LEAF_DEFAULT_RUNNER_SPEED_MS, LED_LEAF_DEFAULT_RUNNER_COLOR, LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE, LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE_INTERVAL_MS, LED_LEAF_DEFAULT_RUNNER_GLOWTIME_MS);                
+            runnerCluster->triggerRunner(leafID, numLeds, LED_LEAF_DEFAULT_RUNNER_SPEED_MS, LED_LEAF_DEFAULT_RUNNER_COLOR, LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE, LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE_INTERVAL_MS, LED_LEAF_DEFAULT_RUNNER_GLOWTIME_MS);                
         }
     }
     for ( int i = 0; i < numLeds; i++ ) {
-        CHSV ledBackColor = background.getLedBackColor(i, senseFilling.getCurrentSense());
-        CHSV ledSprite = runnerCluster->getLedSprite(stripID, i);
+        CHSV ledBackColor = background.getLedBackColor(i, storedTime.storedTime);
+        CHSV ledSprite = runnerCluster->getLedSprite(leafID, i);
         leds[i] = draw(ledBackColor, ledSprite); 
     }
 }
-void LedLeaf::doSetup() {}
+
+void LedLeaf::doSetup() {
+// TBD
+}
 
 ///////////////////////////////////////////////////////////
 
 ///////////////////////////////////////////////////////////
 // Background
 ///////////////////////////////////////////////////////////
+// MOA checked
 
 Background::Background(CHSV activeColor,
                        CHSV inactiveColor,
@@ -178,34 +180,42 @@ CHSV Background::getLedBackColor(int ledIndex, long senseValue) {
     if ( ledSenseValue + sensePerLed >= senseValue ) {
         return activeColor;
     }
-    int activePercent = 100 * (senseValue - ledSenseValue) / sensePerLed;
+    int activePercent = (senseValue - ledSenseValue) / (100 * sensePerLed);
     return fade(inactiveColor, activeColor, activePercent);
 }
 
 ///////////////////////////////////////////////////////////
 
 ///////////////////////////////////////////////////////////
-// SenseFilling
+// StoredTime
 ///////////////////////////////////////////////////////////
+// MOA checked
 
-SenseFilling::SenseFilling(uint8_t incSenseMsRatio, uint8_t decSenseMsRatio, long maxSense): incSenseMsRatio(incSenseMsRatio), decSenseMsRatio(decSenseMsRatio), maxSense(maxSense), accumulatedSense(0), lastSenseTimestamp(millis()) {}
+StoredTime::StoredTime(uint8_t incRatio, uint8_t decRatio, long minTime, long maxTime)
+    : incRatio(incRatio),
+      decRatio(decRatio),
+      minTime(minTime),
+      maxTime(maxTime),
+      storedTime(minTime),
+      lastCycleTimestamp(millis()) {}
 
-void SenseFilling::calculateCycle(bool sensed) {
+void StoredTime::runCycle(bool sensed) {
     if (sensed) {
-        accumulatedSense = accumulatedSense + ( cycleTimestamp - lastSenseTimestamp ) * incSenseMsRatio;
+        if ( storedTime < maxTime ) {
+            storedTime = storedTime + ( cycleTimestamp - lastCycleTimestamp ) * incRatio;
+            if ( storedTime > maxTime ) {
+                storedTime = maxTime;
+            }
+        }
     } else {
-        if ( accumulatedSense < 1 ) {
-            accumulatedSense = accumulatedSense - ( cycleTimestamp - lastSenseTimestamp ) * decSenseMsRatio;
-            if ( accumulatedSense < 0 ) { 
-                accumulatedSense = 0 ;
+        if ( storedTime > minTime ) {
+            storedTime = storedTime - ( cycleTimestamp - lastCycleTimestamp ) * decRatio;
+            if ( storedTime < minTime ) { 
+                storedTime = minTime;
             }
         }
     }
-    lastSenseTimestamp = cycleTimestamp;
-}
-
-long SenseFilling::getCurrentSense() {
-    return accumulatedSense;
+    lastCycleTimestamp = cycleTimestamp;
 }
 
 ///////////////////////////////////////////////////////////
@@ -213,21 +223,22 @@ long SenseFilling::getCurrentSense() {
 ///////////////////////////////////////////////////////////
 // RunnerCluster
 ///////////////////////////////////////////////////////////
+// MOA TBD check
 
-void RunnerCluster::triggerRunner(uint8_t stripID, int numLeds, long runnerSpeed, CHSV runnerColor, uint8_t hueChange, long hueChangeInterval, long glowTime) {
+void RunnerCluster::triggerRunner(uint8_t leafID, int numLeds, long runnerSpeed, CHSV runnerColor, uint8_t hueChange, long hueChangeInterval, long glowTime) {
     for ( int i = 0; i < RUNNER_CLUSTER_MAX_ACTIVE_RUNNERS; i++ ) {
         if ( !runner[i].active ) {
-            runner[i].start(stripID, numLeds, runnerSpeed, runnerColor, hueChange, hueChangeInterval, glowTime);
+            runner[i].start(leafID, numLeds, runnerSpeed, runnerColor, hueChange, hueChangeInterval, glowTime);
             return;
         }
     }
-    DEBUG_PRINTLN("failed to trigger new runner");
+    DEBUG_PRINTLN("ERROR: failed to trigger new runner");
 }
 
-CHSV RunnerCluster::getLedSprite(uint8_t stripID, int ledIndex) {
+CHSV RunnerCluster::getLedSprite(uint8_t leafID, int ledIndex) {
     CHSV ledSprite = HSV_COLOR_TRANSPARENT;
     for ( int i = 0; i < RUNNER_CLUSTER_MAX_ACTIVE_RUNNERS; i++ ) {
-        if ( runner[i].active && ( runner[i].stripID == stripID ) ) {
+        if ( runner[i].active && ( runner[i].leafID == leafID ) ) {
             ledSprite = overlaySprites(ledSprite, runner[i].ledColor(ledIndex));
         }
     }
@@ -247,10 +258,11 @@ void RunnerCluster::update() {
 ///////////////////////////////////////////////////////////
 // LedRunner
 ///////////////////////////////////////////////////////////
+// MOA TBD check
 
-void LedRunner::start(uint8_t stripID, int numLeds, long runnerSpeed, CHSV runnerColor, uint8_t hueChange, long hueChangeInterval, long glowTime) {
+void LedRunner::start(uint8_t leafID, int numLeds, long runnerSpeed, CHSV runnerColor, uint8_t hueChange, long hueChangeInterval, long glowTime) {
     active = true;
-    stripID = stripID;
+    leafID = leafID;
     numLeds = numLeds;
     runnerSpeed = runnerSpeed;
     runnerColor = runnerColor;
@@ -273,6 +285,9 @@ void LedRunner::updateActiveLed() {
 void LedRunner::updateRunner() {
     updateActiveLed();
     updateHue();
+    if ( activeLed > numLeds + (glowTime / runnerSpeed) ) {
+        active = false;
+    }
 }
 CHSV LedRunner::ledColor(int ledIndex) {
     if ( ledIndex > activeLed ) {

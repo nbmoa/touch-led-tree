@@ -3,7 +3,7 @@
 struct LedRunner {
     bool active;
     
-    uint8_t stripID;
+    uint8_t leafID;
     int numLeds;
     long runnerSpeed;
     CHSV runnerColor;
@@ -15,7 +15,7 @@ struct LedRunner {
     long hueLastChanged;
     long startTime;
 
-    void start(uint8_t stripID, int numLeds, long runnerSpeed, CHSV runnerColor, uint8_t hueChange, long hueChangeInterval, long glowTime);
+    void start(uint8_t leafID, int numLeds, long runnerSpeed, CHSV runnerColor, uint8_t hueChange, long hueChangeInterval, long glowTime);
     void updateHue();
     void updateActiveLed();
     void updateRunner();
