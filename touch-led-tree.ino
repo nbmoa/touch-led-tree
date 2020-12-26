@@ -18,6 +18,7 @@
 ///////////////////////////////////////////////////////////
 // Main defines
 ///////////////////////////////////////////////////////////
+// MOA OK
 
 // cycle timestamp (global var because its used in many places
 long cycleTimestamp;
@@ -43,6 +44,7 @@ void loop()
 ///////////////////////////////////////////////////////////
 // TouchTree
 ///////////////////////////////////////////////////////////
+// MOA TBD check, but looks good
     
 TouchTree::TouchTree()
     :ledLeaf({
@@ -102,6 +104,7 @@ void TouchTree::loop() {
     DEBUG_PRINTDECLN("timeRemain: ", timeRemain);
     lastCycleTimestamp = millis();
 };
+// MOA TBD check
 
 ///////////////////////////////////////////////////////////
 
@@ -134,18 +137,27 @@ LedLeaf::LedLeaf(uint8_t leafID,
       runnerCluster(runnerCluster),
       sensor(sendPin, sensePin),
       storedTime(timeIncRatio, timeDecRatio, timeMinStored, (numLeds * timePerLed) + timeMaxStoredOffset),
-      background(backgroundActiveColor, backgroundInactiveColor, timePerLed) {}
+      background(backgroundActiveColor, backgroundInactiveColor, timePerLed) {
+}
 
 void LedLeaf::runCycle(){
     // Read in the sensor
     bool sensed =  sensor.sense();
-    storedTime.runCycle(sensed);
+
+    // Update storedTime
+    // TBD rename runCycle to update()
+    storedTime.update(sensed);
+
+    // Handle new timers
     if ( sensed == true && previousSenseState == false ) {
-        //try to start a new runner
+        //try to start a new runner if LED_LEAF_MIN_RUNNER_START_INTERVAL_MS already elapsed since last started runner
         if ( cycleTimestamp - lastRunnerStartTime > LED_LEAF_MIN_RUNNER_START_INTERVAL_MS ) {
             runnerCluster->triggerRunner(leafID, numLeds, LED_LEAF_DEFAULT_RUNNER_SPEED_MS, LED_LEAF_DEFAULT_RUNNER_COLOR, LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE, LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE_INTERVAL_MS, LED_LEAF_DEFAULT_RUNNER_GLOWTIME_MS);                
         }
     }
+    previousSenseState = sensed;
+
+    // update the leds based on the stored time and the active runners of the leaf
     for ( int i = 0; i < numLeds; i++ ) {
         CHSV ledBackColor = background.getLedBackColor(i, storedTime.storedTime);
         CHSV ledSprite = runnerCluster->getLedSprite(leafID, i);
@@ -154,7 +166,10 @@ void LedLeaf::runCycle(){
 }
 
 void LedLeaf::doSetup() {
-// TBD
+    // led initialization is done in the TouchTree
+
+    // setup the sensor
+    sensor.doSetup();
 }
 
 ///////////////////////////////////////////////////////////
@@ -162,7 +177,7 @@ void LedLeaf::doSetup() {
 ///////////////////////////////////////////////////////////
 // Background
 ///////////////////////////////////////////////////////////
-// MOA checked
+// MOA OK
 
 Background::Background(CHSV activeColor,
                        CHSV inactiveColor,
@@ -189,7 +204,7 @@ CHSV Background::getLedBackColor(int ledIndex, long senseValue) {
 ///////////////////////////////////////////////////////////
 // StoredTime
 ///////////////////////////////////////////////////////////
-// MOA checked
+// MOA OK
 
 StoredTime::StoredTime(uint8_t incRatio, uint8_t decRatio, long minTime, long maxTime)
     : incRatio(incRatio),
@@ -199,7 +214,7 @@ StoredTime::StoredTime(uint8_t incRatio, uint8_t decRatio, long minTime, long ma
       storedTime(minTime),
       lastCycleTimestamp(millis()) {}
 
-void StoredTime::runCycle(bool sensed) {
+void StoredTime::update(bool sensed) {
     if (sensed) {
         if ( storedTime < maxTime ) {
             storedTime = storedTime + ( cycleTimestamp - lastCycleTimestamp ) * incRatio;
@@ -223,7 +238,7 @@ void StoredTime::runCycle(bool sensed) {
 ///////////////////////////////////////////////////////////
 // RunnerCluster
 ///////////////////////////////////////////////////////////
-// MOA TBD check
+// MOA checked
 
 void RunnerCluster::triggerRunner(uint8_t leafID, int numLeds, long runnerSpeed, CHSV runnerColor, uint8_t hueChange, long hueChangeInterval, long glowTime) {
     for ( int i = 0; i < RUNNER_CLUSTER_MAX_ACTIVE_RUNNERS; i++ ) {
@@ -258,7 +273,7 @@ void RunnerCluster::update() {
 ///////////////////////////////////////////////////////////
 // LedRunner
 ///////////////////////////////////////////////////////////
-// MOA TBD check
+// MOA checked
 
 void LedRunner::start(uint8_t leafID, int numLeds, long runnerSpeed, CHSV runnerColor, uint8_t hueChange, long hueChangeInterval, long glowTime) {
     active = true;
@@ -312,11 +327,15 @@ CHSV LedRunner::ledColor(int ledIndex) {
 ///////////////////////////////////////////////////////////
 // SenseSensor
 ///////////////////////////////////////////////////////////
+// MOA checked
 
-SenseSensor::SenseSensor(const uint8_t sendPin, const uint8_t sensePin): sensePin(sensePin), active(false), disabledSince(0), sensor(sendPin,sensePin) {}
+SenseSensor::SenseSensor(const uint8_t sendPin, const uint8_t sensePin): sensePin(sensePin), active(false), disabledSince(0), sensor(sendPin,sensePin) {
+}
+
 void SenseSensor::doSetup() { 
     sensor.set_CS_AutocaL_Millis(0xFFFFFFFF);
 }
+
 bool SenseSensor::sense() { 
     if (active) {
         long startTime = cycleTimestamp;
