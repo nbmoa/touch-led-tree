@@ -1,5 +1,6 @@
 
-//#define DEBUG 1
+#define DEBUG 1
+//#define ENABLE_DEBUG_PRINTS 1
 
 #include <CapacitiveSensor.h>
 // This suppress the pragma warning of FastLED (see https://github.com/FastLED/FastLED/issues/797)
@@ -74,7 +75,7 @@ void TouchTree::setup() {
                 FastLED.addLeds<TOUCH_TREE_LED_TYPE, TOUCH_TREE_SENSE4_PIN_LED, TOUCH_TREE_COLOR_ORDER>(ledLeaf[index].leds, ledLeaf[index].numLeds); 
                 break;
             default:
-                DEBUG_PRINTLN("ERROR: led pin strip unknown touch pin");
+                PRINTLN("ERROR: led pin strip unknown touch pin");
         }
     }
 
@@ -247,7 +248,7 @@ void RunnerCluster::triggerRunner(uint8_t leafID, int numLeds, long runnerSpeed,
             return;
         }
     }
-    DEBUG_PRINTLN("ERROR: failed to trigger new runner");
+    PRINTLN("ERROR: failed to trigger new runner");
 }
 
 CHSV RunnerCluster::getLedSprite(uint8_t leafID, int ledIndex) {
@@ -329,24 +330,27 @@ CHSV LedRunner::ledColor(int ledIndex) {
 ///////////////////////////////////////////////////////////
 // MOA checked
 
-SenseSensor::SenseSensor(const uint8_t sendPin, const uint8_t sensePin): sensePin(sensePin), active(false), disabledSince(0), sensor(sendPin,sensePin) {
+SenseSensor::SenseSensor(const uint8_t sendPin, const uint8_t sensePin): sensePin(sensePin), active(false), disabledSince(-SENSE_SENSOR_ENABLE_RETRY_INTERVAL_MS), sensor(sendPin,sensePin) {
 }
 
 void SenseSensor::doSetup() { 
     sensor.set_CS_AutocaL_Millis(0xFFFFFFFF);
+    sensor.set_CS_Timeout_Millis(100);
 }
 
 bool SenseSensor::sense() { 
     if (active) {
         long startTime = cycleTimestamp;
         long senseVal = sensor.capacitiveSensor(SENSE_SENSOR_MEASUREMENT_SAMPLES);
-        if ( (cycleTimestamp - startTime ) > SENSE_SENSOR_DISABLE_TIMEOUT_MS) {
+        if ( (millis() - startTime ) > SENSE_SENSOR_DISABLE_TIMEOUT_MS) {
+            PRINTLN("WARN: disable sensor because of timeout");
             active = false;
             disabledSince = startTime;
         }
         return senseVal >= SENSE_SENSOR_SENSE_ACTIVE_THREASHOLD || senseVal <= -SENSE_SENSOR_SENSE_ACTIVE_THREASHOLD;
     } else {
         if ( cycleTimestamp > disabledSince + SENSE_SENSOR_ENABLE_RETRY_INTERVAL_MS ) {
+            PRINTLN("WARN: try to enable sensor because retry interval elapsed");
             // This would also be a good place to recalibrate
             active = true;
         }
