@@ -1,6 +1,6 @@
 
-#define DEBUG 1
-#define ENABLE_DEBUG_PRINTS 1
+//#define DEBUG 1
+//#define ENABLE_DEBUG_PRINTS 1
 //#define DEBUG_CYCLES 1
 //#define DEBUG_SENSOR 1
 //#define DEBUG_SENSOR_RAW_SENSE 1
