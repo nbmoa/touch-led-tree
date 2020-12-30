@@ -38,7 +38,7 @@
 #define CONFIG_SENSE4_PIN_RECEIVE 6
 #define CONFIG_SENSE4_PIN_LED     10
 
-#define CONFIG_RAINBOW_DURATION_MS   10000
+#define CONFIG_RAINBOW_DURATION_MS   60000
 #define CONFIG_RAINBOW_FADE_INTERVAL 4
 #define CONFIG_OVERLAY_SPEED         4
 #define CONFIG_RAINBOW_H_INTERVAL          1
@@ -92,10 +92,10 @@ void loop()
     
 TouchTree::TouchTree()
     :ledLeaf({
-        LedLeaf(1, TOUCH_TREE_SENSE1_NUM_LEDS, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE1_PIN_RECEIVE, CONFIG_BACKGROUND_ACTIVE_V, CONFIG_BACKGROUND_INACTIVE_V, 1000, 1000, 20000, 1, 1, 1000, 4000, &this->runnerCluster),
-        LedLeaf(2, TOUCH_TREE_SENSE2_NUM_LEDS, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE2_PIN_RECEIVE, CONFIG_BACKGROUND_ACTIVE_V, CONFIG_BACKGROUND_INACTIVE_V, 1000, 1000, 20000, 1, 1, 1000, 4000, &this->runnerCluster),
-        LedLeaf(3, TOUCH_TREE_SENSE3_NUM_LEDS, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE3_PIN_RECEIVE, CONFIG_BACKGROUND_ACTIVE_V, CONFIG_BACKGROUND_INACTIVE_V, 1000, 1000, 20000, 1, 1, 1000, 4000, &this->runnerCluster),
-        LedLeaf(4, TOUCH_TREE_SENSE4_NUM_LEDS, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE4_PIN_RECEIVE, CONFIG_BACKGROUND_ACTIVE_V, CONFIG_BACKGROUND_INACTIVE_V, 1000, 1000, 20000, 1, 1, 1000, 4000, &this->runnerCluster),
+        LedLeaf(1, TOUCH_TREE_SENSE1_NUM_LEDS, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE1_PIN_RECEIVE, CONFIG_BACKGROUND_ACTIVE_V, CONFIG_BACKGROUND_INACTIVE_V, 1000, 1000, 20000, 4, 1, 1000, 4000, &this->runnerCluster),
+        LedLeaf(2, TOUCH_TREE_SENSE2_NUM_LEDS, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE2_PIN_RECEIVE, CONFIG_BACKGROUND_ACTIVE_V, CONFIG_BACKGROUND_INACTIVE_V, 1000, 1000, 20000, 4, 1, 1000, 4000, &this->runnerCluster),
+        LedLeaf(3, TOUCH_TREE_SENSE3_NUM_LEDS, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE3_PIN_RECEIVE, CONFIG_BACKGROUND_ACTIVE_V, CONFIG_BACKGROUND_INACTIVE_V, 1000, 1000, 20000, 4, 1, 1000, 4000, &this->runnerCluster),
+        LedLeaf(4, TOUCH_TREE_SENSE4_NUM_LEDS, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE4_PIN_RECEIVE, CONFIG_BACKGROUND_ACTIVE_V, CONFIG_BACKGROUND_INACTIVE_V, 1000, 1000, 20000, 4, 1, 1000, 4000, &this->runnerCluster),
     }),
     runnerCluster() {
 }
@@ -258,7 +258,7 @@ void LedLeaf::runCycle(uint8_t rainbowH, uint8_t rainbowS, bool finalDance){
         
         //try to start a new runner if LED_LEAF_MIN_RUNNER_START_INTERVAL_MS already elapsed since last started runner
         if ( cycleTimestamp - lastRunnerStartTime > LED_LEAF_MIN_RUNNER_START_INTERVAL_MS ) {
-            runnerCluster->triggerRunner(leafID, numLeds, runnerBaseTime + random(runnerDiffTime), rainbowH, LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE, LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE_INTERVAL_MS, LED_LEAF_DEFAULT_RUNNER_GLOW_NUM_LEDS);                
+            runnerCluster->triggerRunner(leafID, numLeds, runnerBaseTime + random(runnerDiffTime), rainbowH, random(LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE), LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE_INTERVAL_MS, LED_LEAF_DEFAULT_RUNNER_GLOW_NUM_LEDS);                
         }
     }
     previousSenseState = sensed;
@@ -417,7 +417,7 @@ void LedRunner::start(uint8_t leafID, int numLeds, long runnerSpeed, uint8_t run
     this->hueChange = hueChange;
     this->hueChangeInterval = hueChangeInterval;
     this->hueLastChanged = cycleTimestamp;
-    this->startTime = cycleTimestamp;
+    this->startTime = cycleTimestamp - runnerLedSpeed;
     updateActiveLed();
 
 #ifdef DEBUG_RUNNER
@@ -433,7 +433,7 @@ void LedRunner::start(uint8_t leafID, int numLeds, long runnerSpeed, uint8_t run
 void LedRunner::updateHue() {
     if ( cycleTimestamp > hueLastChanged + hueChangeInterval ) {
         this->hueLastChanged = cycleTimestamp;
-        this->runnerColorH += random(hueChange);
+        this->runnerColorH += hueChange;
     }
 }
 void LedRunner::updateActiveLed() {
@@ -453,32 +453,34 @@ void LedRunner::updateRunner() {
     }
 }
 CHSV LedRunner::ledColor(int ledIndex) {
-    if ( ledIndex > activeLed ) {
-        return CHSV(runnerColorH, 255, CONFIG_TRANSPARENT_V);
-    }
-    if ( ledIndex < activeLed ) {
-        if ( ledIndex > activeLed - glowNumLeds ) {
-#ifdef DEBUG_RUNNER_GLOW
-            DEBUG_PRINTDECLN("glowing led: ", ledIndex);
-#endif
-            uint8_t transValue = (glowNumLeds - (activeLed - ledIndex)) * 255 / glowNumLeds;
-//#ifdef DEBUG_RUNNER_GLOW
-//                DEBUG_PRINT("runner-color [");
-//                DEBUG_PRINTDEC(ledIndex);
-//                DEBUG_PRINT("]-h: ");
-//                DEBUG_PRINTDEC(runnerColor.h);
-//                DEBUG_PRINTDECLN(", tans: ", transValue);
-//#endif
-    
+    if ( ( ledIndex <= activeLed + 1  ) && ( ledIndex > activeLed - glowNumLeds ) ) {
+//        if ( ledIndex == activeLed ) {
+//            return CHSV(runnerColorH, 255, 255);
+//        } else if ( ledIndex == activeLed + 1 ) {
+        if ( ledIndex == activeLed + 1 ) {
+            uint8_t fadeInH = 255 * ( ( cycleTimestamp - startTime ) % runnerLedSpeed) / runnerLedSpeed;
+            return CHSV(runnerColorH, 255, fadeInH);
+        } else {
+            long glowTime = (glowNumLeds * runnerLedSpeed);
+            long glowDiff = cycleTimestamp - startTime - ( ledIndex * runnerLedSpeed);
+            uint8_t fadeOutH = 255 * ( glowTime - glowDiff ) / glowTime;
 
-            return CHSV(runnerColorH, 255, transValue);
+            if (ledIndex == 5) {
+                DEBUG_PRINT("time: ");
+                DEBUG_PRINTDEC(cycleTimestamp - startTime);
+                DEBUG_PRINT(", glowDiff: ");
+                DEBUG_PRINTDEC(glowDiff);
+                DEBUG_PRINT(", speed: ");
+                DEBUG_PRINTDEC(runnerLedSpeed);
+                DEBUG_PRINT(", glowTime: ");
+                DEBUG_PRINTDEC(glowTime);
+                DEBUG_PRINTDECLN(", fadeOutH: ", fadeOutH);
+            }
+            return CHSV(runnerColorH, 255, fadeOutH);
         }
+    } else {
         return CHSV(runnerColorH, 255, CONFIG_TRANSPARENT_V);
     }
-
-//    DEBUG_PRINTDECLN("MOADEBUG: color: ", runnerColor.h);
-
-    return CHSV(runnerColorH, 255, 255);
 }
 
 ///////////////////////////////////////////////////////////
