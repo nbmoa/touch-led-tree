@@ -1,13 +1,14 @@
 
-#define HSV_COLOR_TRANSPARENT CHSV{0,0,0}
 struct LedRunner {
     bool active;
     
     uint8_t leafID;
     int numLeds;
     long runnerSpeed;
+    long runnerLedSpeed;
     CHSV runnerColor;
-    long glowTime;
+    int glowNumLeds;
+    
     uint8_t hueChange;     // amout of hue change in on interval
     long hueChangeInterval; // interval ms the change of the hue value is applied
     
@@ -15,7 +16,7 @@ struct LedRunner {
     long hueLastChanged;
     long startTime;
 
-    void start(uint8_t leafID, int numLeds, long runnerSpeed, CHSV runnerColor, uint8_t hueChange, long hueChangeInterval, long glowTime);
+    void start(uint8_t leafID, int numLeds, long runnerSpeed, CHSV runnerColor, uint8_t hueChange, long hueChangeInterval, int glowNumLeds);
     void updateHue();
     void updateActiveLed();
     void updateRunner();
