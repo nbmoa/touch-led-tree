@@ -302,15 +302,20 @@ Background::Background(uint8_t activeColorV,
 
 CHSV Background::getLedBackColor(int ledIndex,long storedTime, uint8_t backH, uint8_t backS, uint8_t overlayV) {
     long storedTimeNeededForLed = ledIndex * timePerLed;
-    int activePercent = (storedTime - storedTimeNeededForLed) / (100 * timePerLed);
 
     uint8_t backV;
     // its inactive
-    if ( storedTime > storedTimeNeededForLed ) {
+    if ( storedTime >= storedTimeNeededForLed + timePerLed ) {
         backV = activeColorV;
-    } else if ( storedTime <= storedTimeNeededForLed + timePerLed ) {
+    } else if ( storedTime < storedTimeNeededForLed ) {
         backV = inactiveColorV;
     } else {
+        int activePercent = 100 * ( storedTime - storedTimeNeededForLed ) / timePerLed;
+        if ( activePercent != 0 ) {
+            DEBUG_PRINT("fade-led[");
+            DEBUG_PRINTDEC(ledIndex);
+            DEBUG_PRINTDECLN("]-percent: ", activePercent);
+        }
         backV = fade(inactiveColorV, activeColorV, activePercent);    
     }
     if ( overlayV > backV ) {
