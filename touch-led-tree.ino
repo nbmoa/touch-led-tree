@@ -1,5 +1,5 @@
 
-//#define DEBUG 1
+#define DEBUG 1
 //#define ENABLE_DEBUG_PRINTS 1
 //#define DEBUG_CYCLES 1
 //#define DEBUG_SENSOR 1
@@ -43,6 +43,7 @@
 #define CONFIG_OVERLAY_SPEED         4
 #define CONFIG_RAINBOW_H_INTERVAL          1
 #define CONFIG_RAINBOW_H_FINISHED_INTERVAL 3
+#define CONFIG_RAINBOW_NEEDED_RUNNERS_FOR_RETRIGGER 10
 
 #include <CapacitiveSensor.h>
 // This suppress the pragma warning of FastLED (see https://github.com/FastLED/FastLED/issues/797)
@@ -154,8 +155,13 @@ void TouchTree::loop() {
                 this->rainbowS += CONFIG_RAINBOW_FADE_INTERVAL;
             }
         } else {
-            rainbowStartTime = 0;
-            reset();
+            if ( runnerCluster.executedRunners > CONFIG_RAINBOW_NEEDED_RUNNERS_FOR_RETRIGGER ) {
+                PRINTLN("INFO: retrigger rainbow dance");
+                triggerRainbow();
+            } else {
+                rainbowStartTime = 0;
+                reset();
+            }
         }
     }
 
@@ -169,8 +175,8 @@ void TouchTree::loop() {
     
     if (done) {
         if (rainbowStartTime == 0) {
-            DEBUG_PRINTLN("INFO: do the final dance");
-            rainbowStartTime = cycleTimestamp;
+            PRINTLN("INFO: do the final rainbow dance");
+            triggerRainbow();
         }
     }
     
@@ -187,6 +193,11 @@ void TouchTree::loop() {
 #endif
 };
 
+void TouchTree::triggerRainbow() {
+    rainbowStartTime = cycleTimestamp;
+    runnerCluster.reset();
+}
+ 
 void TouchTree::reset() {
     for (int index = 0; index < TOUCH_TREE_NUM_STRIPS; index++) {
         ledLeaf[index].reset();
@@ -255,10 +266,9 @@ void LedLeaf::runCycle(uint8_t rainbowH, uint8_t rainbowS, bool finalDance){
     
     // Handle new timers
     if ( sensed == true && previousSenseState == false ) {
-        
         //try to start a new runner if LED_LEAF_MIN_RUNNER_START_INTERVAL_MS already elapsed since last started runner
         if ( cycleTimestamp - lastRunnerStartTime > LED_LEAF_MIN_RUNNER_START_INTERVAL_MS ) {
-            runnerCluster->triggerRunner(leafID, numLeds, runnerBaseTime + random(runnerDiffTime), rainbowH, random(LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE), LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE_INTERVAL_MS, LED_LEAF_DEFAULT_RUNNER_GLOW_NUM_LEDS);                
+            runnerCluster->triggerRunner(leafID, numLeds, runnerBaseTime + random(runnerDiffTime), rainbowH + 128, random(LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE), LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE_INTERVAL_MS, LED_LEAF_DEFAULT_RUNNER_GLOW_NUM_LEDS);                
         }
     }
     previousSenseState = sensed;
@@ -374,6 +384,7 @@ void RunnerCluster::triggerRunner(uint8_t leafID, int numLeds, long runnerSpeed,
     for ( int i = 0; i < RUNNER_CLUSTER_MAX_ACTIVE_RUNNERS; i++ ) {
         if ( !runner[i].active ) {
             runner[i].start(leafID, numLeds, runnerSpeed, runnerColorH, hueChange, hueChangeInterval, glowNumLeds);
+            executedRunners += 1;
             return;
         }
     }
@@ -398,7 +409,9 @@ void RunnerCluster::update() {
         }
     }
 }
-
+ void RunnerCluster::reset() {
+    this->executedRunners = 0;
+ }
 ///////////////////////////////////////////////////////////
 
 ///////////////////////////////////////////////////////////

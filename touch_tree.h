@@ -35,4 +35,5 @@ struct TouchTree {
     void setup();
     void loop();
     void reset();
+    void triggerRainbow();
 };
