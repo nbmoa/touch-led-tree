@@ -7,7 +7,7 @@
 #define DEBUG_RUNNER 1
 //#define DEBUG_RUNNER_GLOW 1
 //#define DEBUG_RUNNER_ACTIVE_LED 1
-#define DEBUG_SPRITE 1
+//#define DEBUG_SPRITE 1
 
 #define HSV_COLOR_WHITE       CHSV(0, 0, 255)
 #define HSV_COLOR_DIMM_WHITE  CHSV(0, 0, 30)
@@ -23,7 +23,7 @@
 #define CONFIG_SENSE4_NUM_LEDS    12
 
 #define CONFIG_ACTIVE_COLOR    HSV_COLOR_WHITE
-#define CONFIG_INACTIVE_COLOR  HSV_COLOR_WHITE
+#define CONFIG_INACTIVE_COLOR  HSV_COLOR_DIMM_WHITE
 
 #define CONFIG_MAX_ACTIVE_RUNNERS 16
 #define CONFIG_RUNNER_GLOW_NUM_LEDS 4
@@ -90,10 +90,10 @@ void loop()
     
 TouchTree::TouchTree()
     :ledLeaf({
-        LedLeaf(1, TOUCH_TREE_SENSE1_NUM_LEDS, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE1_PIN_RECEIVE, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 1000, 1000, 0, 1, 1, CHSV(0,255,255), 1000, 4000, &this->runnerCluster),
-        LedLeaf(2, TOUCH_TREE_SENSE2_NUM_LEDS, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE2_PIN_RECEIVE, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 1000, 1000, 0, 2, 2, CHSV(64,255,255), 1000, 4000, &this->runnerCluster),
-        LedLeaf(3, TOUCH_TREE_SENSE3_NUM_LEDS, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE3_PIN_RECEIVE, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 1000, 1000, 0, 1, 2, CHSV(128,255,255), 1000, 4000, &this->runnerCluster),
-        LedLeaf(4, TOUCH_TREE_SENSE4_NUM_LEDS, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE4_PIN_RECEIVE, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 1000, 1000, 0, 4, 4, CHSV(192,255,255), 1000, 4000, &this->runnerCluster),
+        LedLeaf(1, TOUCH_TREE_SENSE1_NUM_LEDS, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE1_PIN_RECEIVE, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 1000, 1000, 20000, 1, 1, CHSV(0,255,255), 1000, 4000, &this->runnerCluster),
+        LedLeaf(2, TOUCH_TREE_SENSE2_NUM_LEDS, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE2_PIN_RECEIVE, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 1000, 1000, 20000, 2, 2, CHSV(64,255,255), 1000, 4000, &this->runnerCluster),
+        LedLeaf(3, TOUCH_TREE_SENSE3_NUM_LEDS, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE3_PIN_RECEIVE, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 1000, 1000, 20000, 1, 2, CHSV(128,255,255), 1000, 4000, &this->runnerCluster),
+        LedLeaf(4, TOUCH_TREE_SENSE4_NUM_LEDS, TOUCH_TREE_PIN_TOUCH_SEND, TOUCH_TREE_SENSE4_PIN_RECEIVE, TOUCH_TREE_DEFAULT_ACTIVE_COLOR, TOUCH_TREE_DEFAULT_INACTIVE_COLOR, 1000, 1000, 20000, 4, 4, CHSV(192,255,255), 1000, 4000, &this->runnerCluster),
     }),
     runnerCluster() {
 }
@@ -132,8 +132,24 @@ void TouchTree::loop() {
     // Update the runners
     runnerCluster.update();
 
+    bool done = true;
     for (int index = 0; index < TOUCH_TREE_NUM_STRIPS; index++) {
         ledLeaf[index].runCycle();
+        if ( ledLeaf[index].storedTime.storedTime < ledLeaf[index].background.sensePerLed * ledLeaf[index].numLeds ) {
+            done = false;
+        } else {
+        }
+    }
+    
+    if (done) {
+      for(uint8_t j = 0; j < 256; j++) {
+          for (int index = 0; index < TOUCH_TREE_NUM_STRIPS; index++) {
+              for (int l = 0; l < ledLeaf[index].numLeds; l++ ) {
+                  ledLeaf[index].leds[l] = CHSV(j+l+(index*32), 255, 255);          
+              }
+          }
+          FastLED.show();
+      }
     }
    
     FastLED.show();
@@ -204,8 +220,10 @@ void LedLeaf::runCycle(){
     if ( sensed == true && previousSenseState == false ) {
         //try to start a new runner if LED_LEAF_MIN_RUNNER_START_INTERVAL_MS already elapsed since last started runner
         if ( cycleTimestamp - lastRunnerStartTime > LED_LEAF_MIN_RUNNER_START_INTERVAL_MS ) {
-        //    runnerCluster->triggerRunner(leafID, numLeds, runnerBaseTime + random(runnerDiffTime), runnerColor, LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE, LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE_INTERVAL_MS, LED_LEAF_DEFAULT_RUNNER_GLOW_NUM_LEDS);                
-            runnerCluster->triggerRunner(leafID, numLeds, runnerBaseTime + random(runnerDiffTime), CHSV(random(256),255,255), LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE, LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE_INTERVAL_MS, LED_LEAF_DEFAULT_RUNNER_GLOW_NUM_LEDS);                
+        // TBD change hue of base runner color
+        // MOA QUESTION should the background hue be the same as the runnerColor.hue
+            runnerCluster->triggerRunner(leafID, numLeds, runnerBaseTime + random(runnerDiffTime), runnerColor, LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE, LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE_INTERVAL_MS, LED_LEAF_DEFAULT_RUNNER_GLOW_NUM_LEDS);                
+        //    runnerCluster->triggerRunner(leafID, numLeds, runnerBaseTime + random(runnerDiffTime), CHSV(random(256),255,255), LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE, LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE_INTERVAL_MS, LED_LEAF_DEFAULT_RUNNER_GLOW_NUM_LEDS);                
         }
     }
     previousSenseState = sensed;
