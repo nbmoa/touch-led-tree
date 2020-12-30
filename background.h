@@ -1,12 +1,12 @@
 
 struct Background {
-    CHSV activeColor;    // LED active background color
-    CHSV inactiveColor;  // LED inactive background color
+    uint8_t activeColorV;    // LED active background color
+    uint8_t inactiveColorV;  // LED inactive background color
 
-    long sensePerLed;    // sense value needed to light up all leds
+    long timePerLed;    // sense value needed to light up all leds
     
-    Background(CHSV activeColor,
-               CHSV inactiveColor,
-               long sensePerLed);
-    CHSV getLedBackColor(int ledIndex, long senseValue); 
+    Background(uint8_t activeColorV,
+               uint8_t inactiveColorV,
+               long timePerLed);
+    CHSV getLedBackColor(int ledIndex, long senseValue, uint8_t backH, uint8_t backS, uint8_t overlayV); 
 };

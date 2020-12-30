@@ -7,12 +7,13 @@ struct LedLeaf {
     uint8_t leafID;    // ID of the leaf
     int     numLeds;    // Number of leds of the leaf
 
-    CHSV runnerColor;    // LED color of the runner
     long runnerBaseTime;
     long runnerDiffTime;
     bool previousSenseState;
     
     long lastRunnerStartTime;
+    uint8_t fullFade;
+    uint8_t overlayV;
 
     CRGB leds[LED_LEAF_MAX_LEDS_PER_STRIP];
 
@@ -25,17 +26,17 @@ struct LedLeaf {
             int     numLeds,
             uint8_t sendPin,
             uint8_t sensePin,
-            CHSV    backgroundActiveColor,
-            CHSV    backgroundInactiveColor,
+            uint8_t backgroundActiveColorV,
+            uint8_t backgroundInactiveColorV,
             long    timePerLed,
             long    timeMinStored,
             long    timeMaxStoredOffset,
             uint8_t timeIncRatio,
             uint8_t timeDecRatio,
-            CHSV    runnerColor,
             long    runnerBaseTime,
             long    runnerDiffTime,
             RunnerCluster *runnerCluster);
-    void runCycle();
+    void runCycle(uint8_t rainbowC, uint8_t rainbowS, bool finalDance);
     void doSetup();
+    void reset();
 };

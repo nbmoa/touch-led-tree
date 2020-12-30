@@ -21,15 +21,18 @@
 #define TOUCH_TREE_SENSE4_PIN_RECEIVE CONFIG_SENSE4_PIN_RECEIVE
 #define TOUCH_TREE_SENSE4_PIN_LED     CONFIG_SENSE4_PIN_LED
 
-#define TOUCH_TREE_DEFAULT_ACTIVE_COLOR    CONFIG_ACTIVE_COLOR
-#define TOUCH_TREE_DEFAULT_INACTIVE_COLOR  CONFIG_INACTIVE_COLOR
 struct TouchTree {
     long lastCycleTimestamp;
 
     RunnerCluster      runnerCluster;
     LedLeaf ledLeaf[TOUCH_TREE_NUM_STRIPS];
-    
+
+    long rainbowStartTime;
+    uint8_t rainbowH;
+    uint8_t rainbowS;
+
     TouchTree();
     void setup();
-    void loop(); 
+    void loop();
+    void reset();
 };
