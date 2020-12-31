@@ -1,5 +1,5 @@
 
-#define DEBUG 1
+//#define DEBUG 1
 //#define ENABLE_DEBUG_PRINTS 1
 //#define DEBUG_CYCLES 1
 //#define DEBUG_SENSOR 1
@@ -26,6 +26,7 @@
 //#define CONFIG_RUNNER_COLOR       CHSV(64,255,255)
 #define CONFIG_RUNNER_HUE_CHANGE  20
 #define CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS 200
+#define CONFIG_RUNNER_START_HUE_INCREMENT 16
 
 // PIN configuration
 #define CONFIG_PIN_TOUCH_SEND     2
@@ -39,7 +40,7 @@
 #define CONFIG_SENSE4_PIN_LED     10
 
 #define CONFIG_RAINBOW_DURATION_MS   60000
-#define CONFIG_RAINBOW_FADE_INTERVAL 4
+#define CONFIG_RAINBOW_FADE_INTERVAL 2
 #define CONFIG_OVERLAY_SPEED         4
 #define CONFIG_RAINBOW_H_INTERVAL          1
 #define CONFIG_RAINBOW_H_FINISHED_INTERVAL 3
@@ -230,6 +231,7 @@ LedLeaf::LedLeaf(uint8_t leafID,
       previousSenseState(false),
       lastRunnerStartTime(0),
       fullFade(0),
+      hueOffset((leafID - 1) * 64),
       runnerCluster(runnerCluster),
       sensor(sendPin, sensePin),
       storedTime(timeIncRatio, timeDecRatio, timeMinStored, (numLeds * timePerLed) + timeMaxStoredOffset),
@@ -268,14 +270,16 @@ void LedLeaf::runCycle(uint8_t rainbowH, uint8_t rainbowS, bool finalDance){
     if ( sensed == true && previousSenseState == false ) {
         //try to start a new runner if LED_LEAF_MIN_RUNNER_START_INTERVAL_MS already elapsed since last started runner
         if ( cycleTimestamp - lastRunnerStartTime > LED_LEAF_MIN_RUNNER_START_INTERVAL_MS ) {
-            runnerCluster->triggerRunner(leafID, numLeds, runnerBaseTime + random(runnerDiffTime), rainbowH + 128, random(LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE), LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE_INTERVAL_MS, LED_LEAF_DEFAULT_RUNNER_GLOW_NUM_LEDS);                
+            this->hueOffset += CONFIG_RUNNER_START_HUE_INCREMENT;
+            PRINTDECLN("MOA hueOffset: ", hueOffset);
+            runnerCluster->triggerRunner(leafID, numLeds, runnerBaseTime + random(runnerDiffTime), rainbowH + hueOffset + 128, random(LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE), LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE_INTERVAL_MS, LED_LEAF_DEFAULT_RUNNER_GLOW_NUM_LEDS);                
         }
     }
     previousSenseState = sensed;
 
     // update the leds based on the stored time and the active runners of the leaf
     for ( int i = 0; i < numLeds; i++ ) {
-        CHSV ledBackColor = background.getLedBackColor(i, storedTime.storedTime, rainbowH, rainbowS, overlayV);
+        CHSV ledBackColor = background.getLedBackColor(i, storedTime.storedTime, rainbowH + hueOffset, rainbowS, overlayV);
         CHSV ledSprite = runnerCluster->getLedSprite(leafID, i);
 
         CHSV ledValue = draw(ledBackColor, ledSprite);
@@ -526,7 +530,7 @@ bool SenseSensor::sense() {
         return senseVal >= SENSE_SENSOR_SENSE_ACTIVE_THREASHOLD || senseVal <= -SENSE_SENSOR_SENSE_ACTIVE_THREASHOLD;
     } else {
         if ( cycleTimestamp > disabledSince + SENSE_SENSOR_ENABLE_RETRY_INTERVAL_MS ) {
-            PRINTLN("WARN: try to enable sensor because retry interval elapsed");
+            DEBUG_PRINTLN("WARN: try to enable sensor because retry interval elapsed");
             // This would also be a good place to recalibrate
             this->active = true;
         }
@@ -540,45 +544,54 @@ bool SenseSensor::sense() {
 // Helpers
 ///////////////////////////////////////////////////////////
 
+// fade a h/s/v value by the given percentage
 uint8_t fade(uint8_t from, uint8_t to, int percent) {
     CHSV result;
     return from + ( percent * (to - from) / 100);
 }
 
+// overlay the sprites of the runners
 CHSV overlaySprites(CHSV s1, CHSV s2) {
-    CHSV result;
+    CHSV result = s2;
+    
+    // s1 is transparent so just take s2
     if ( s1.v == 0 ) {
-        return s2;
+        return result;
     }
-    uint8_t v = s1.v;
-    if ( s2.v > s1.v ) {
-        v = s2.v;
+    
+    // pick the highest v and s value
+    if ( s1.v > s2.v ) {
+        result.v = s1.v;
     }
-    uint8_t s = s1.s;
-    if ( s2.s > s1.s ) {
-        s = s2.s;
+    if ( s1.s > s2.s ) {
+        result.s = s1.s;
     }
-    // TBD Not sure how this will look like, need to play around with it
-    result.h = s1.h + s2.h;
-    result.s = s;
-    result.v = v;
+
+    // get median for the h value
+    result.h = s1.h + ((s2.h - s1.h) / 2);
+
+    // yeah we have the result
     return result;
 }
 
+// draw the fram of the background
 CHSV draw(CHSV back, CHSV frame) {
-    CHSV result;
-    uint8_t opacity = frame.v;
-    // result.h = back.h + ((frame.h - back.h) / 255) * opacity;
-    result.h = (255 * back.h + (frame.h - back.h) *opacity ) / 255;
-    if ( back.s == 0 ) {
-      result.h = frame.h;
-    }
-    result.s = back.s + ((frame.s - back.s) / 255) * opacity;
-    if ( back.v + opacity > 255 ) {
+    CHSV result = back;
+
+    // the resulting h value is the median of of front and back
+    result.h = (255 * back.h + (frame.h - back.h) * frame.v ) / 255;
+
+    // fade in the s value baed on the frame.v value
+    result.s = back.s + (frame.v * (frame.s - back.s) / 255);
+
+    // get h value of  by adding back and frame and caping it at 255
+    if ( back.v + frame.v > 255 ) {
         result.v = 255;
     } else {
-        result.v = back.v + opacity;
+        result.v = back.v + frame.v;
     }
+
+    // and done
     return result;
 }
 

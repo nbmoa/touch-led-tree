@@ -15,6 +15,8 @@ struct LedLeaf {
     uint8_t fullFade;
     uint8_t overlayV;
 
+    uint8_t hueOffset;
+
     CRGB leds[LED_LEAF_MAX_LEDS_PER_STRIP];
 
     RunnerCluster   *runnerCluster;
