@@ -4,7 +4,7 @@
 #define TOUCH_TREE_COLOR_ORDER GRB              // WS2812B LED strips have GRB color order
 #define TOUCH_TREE_DEFAULT_BRIGHTNESS 64        // TBD what is the range is 64 max?
 
-#define TOUCH_TREE_CYCLE_INTERVAL 100 // 41.666 == 24 update / sec
+#define TOUCH_TREE_CYCLE_INTERVAL CONFIG_CYCLE_INTERVAL // 41.666 == 24 update / sec
 
 #define TOUCH_TREE_SENSE1_NUM_LEDS CONFIG_SENSE1_NUM_LEDS
 #define TOUCH_TREE_SENSE2_NUM_LEDS CONFIG_SENSE2_NUM_LEDS
@@ -26,6 +26,8 @@ struct TouchTree {
 
     RunnerCluster      runnerCluster;
     LedLeaf ledLeaf[TOUCH_TREE_NUM_STRIPS];
+
+    long lastHueUpdateTimestamp;
 
     long rainbowStartTime;
     uint8_t rainbowH;

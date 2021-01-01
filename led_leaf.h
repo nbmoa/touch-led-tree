@@ -16,6 +16,7 @@ struct LedLeaf {
     uint8_t overlayV;
 
     uint8_t hueOffset;
+    int8_t runnerCounter;
 
     CRGB leds[LED_LEAF_MAX_LEDS_PER_STRIP];
 

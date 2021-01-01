@@ -1,15 +1,17 @@
 
-//#define DEBUG 1
-//#define ENABLE_DEBUG_PRINTS 1
+#define DEBUG 1
+#define ENABLE_DEBUG_PRINTS 1
 //#define DEBUG_CYCLES 1
 //#define DEBUG_SENSOR 1
 //#define DEBUG_SENSOR_RAW_SENSE 1
 //#define DEBUG_RUNNER 1
+#define DEBUG_RUNNER_LED 1
+//#define DEBUG_FADE_PERC 1
 //#define DEBUG_RUNNER_GLOW 1
 //#define DEBUG_RUNNER_ACTIVE_LED 1
 //#define DEBUG_SPRITE 1
 
-#define CONFIG_SENSE_ACTIVE_THREASHOLD        5000
+#define CONFIG_SENSE_ACTIVE_THREASHOLD        1000
 #define CONFIG_SENSE_ENABLE_RETRY_INTERVAL_MS 10000
 #define CONFIG_MAX_LEDS_PER_STRIP 12
 #define CONFIG_SENSE1_NUM_LEDS    12
@@ -24,9 +26,11 @@
 #define CONFIG_MAX_ACTIVE_RUNNERS 16
 #define CONFIG_RUNNER_GLOW_NUM_LEDS 4
 //#define CONFIG_RUNNER_COLOR       CHSV(64,255,255)
-#define CONFIG_RUNNER_HUE_CHANGE  20
-#define CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS 200
+#define CONFIG_RUNNER_HUE_CHANGE  16
+#define CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS 100
 #define CONFIG_RUNNER_START_HUE_INCREMENT 16
+
+#define CONFIG_CYCLE_INTERVAL 100 // 41.666 == 24 update / sec
 
 // PIN configuration
 #define CONFIG_PIN_TOUCH_SEND     2
@@ -42,9 +46,10 @@
 #define CONFIG_RAINBOW_DURATION_MS   60000
 #define CONFIG_RAINBOW_FADE_INTERVAL 2
 #define CONFIG_OVERLAY_SPEED         4
-#define CONFIG_RAINBOW_H_INTERVAL          1
+#define CONFIG_RAINBOW_H_INTERVAL          4
 #define CONFIG_RAINBOW_H_FINISHED_INTERVAL 3
 #define CONFIG_RAINBOW_NEEDED_RUNNERS_FOR_RETRIGGER 10
+#define CONFIG_RAINBOW_CHANGE_INTERVAL_MS 100
 
 #include <CapacitiveSensor.h>
 // This suppress the pragma warning of FastLED (see https://github.com/FastLED/FastLED/issues/797)
@@ -136,7 +141,10 @@ void TouchTree::loop() {
     // Update the runners
     runnerCluster.update();
 
-    rainbowH += CONFIG_RAINBOW_H_INTERVAL;
+    if (cycleTimestamp > lastHueUpdateTimestamp + CONFIG_RAINBOW_CHANGE_INTERVAL_MS) {
+        lastHueUpdateTimestamp = cycleTimestamp;
+        rainbowH += CONFIG_RAINBOW_H_INTERVAL;
+    }
 
     if (rainbowStartTime == 0 ) {
         if ( rainbowS > 0 ) {
@@ -271,8 +279,29 @@ void LedLeaf::runCycle(uint8_t rainbowH, uint8_t rainbowS, bool finalDance){
         //try to start a new runner if LED_LEAF_MIN_RUNNER_START_INTERVAL_MS already elapsed since last started runner
         if ( cycleTimestamp - lastRunnerStartTime > LED_LEAF_MIN_RUNNER_START_INTERVAL_MS ) {
             this->hueOffset += CONFIG_RUNNER_START_HUE_INCREMENT;
-            PRINTDECLN("MOA hueOffset: ", hueOffset);
-            runnerCluster->triggerRunner(leafID, numLeds, runnerBaseTime + random(runnerDiffTime), rainbowH + hueOffset + 128, random(LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE), LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE_INTERVAL_MS, LED_LEAF_DEFAULT_RUNNER_GLOW_NUM_LEDS);                
+            long runnerSpeed;
+            switch(sensor.sensePin) {
+                case TOUCH_TREE_SENSE1_PIN_RECEIVE:
+                    runnerSpeed = 1000;
+                    break;
+                case TOUCH_TREE_SENSE3_PIN_RECEIVE:
+//                    runnerSpeed = runnerBaseTime + random(runnerDiffTime);
+                    runnerSpeed = 4000;
+                    break;
+                case TOUCH_TREE_SENSE2_PIN_RECEIVE:
+                    runnerSpeed = 2000;
+                    break;
+                case TOUCH_TREE_SENSE4_PIN_RECEIVE:
+//                    //long runnerSpeed;
+//                    runnerSpeed = runnerCounter * 1000;
+//                    runnerCounter++;
+//                    if (runnerCounter > 6) {
+//                        runnerCounter = 1;
+//                    }
+                    runnerSpeed = 8000;
+                    break;
+            }
+            runnerCluster->triggerRunner(leafID, numLeds, runnerSpeed, rainbowH + hueOffset + 64, 4, 100, LED_LEAF_DEFAULT_RUNNER_GLOW_NUM_LEDS);                
         }
     }
     previousSenseState = sensed;
@@ -325,11 +354,13 @@ CHSV Background::getLedBackColor(int ledIndex,long storedTime, uint8_t backH, ui
         backV = inactiveColorV;
     } else {
         int activePercent = 100 * ( storedTime - storedTimeNeededForLed ) / timePerLed;
+#ifdef DEBUG_FADE_PERC
         if ( activePercent != 0 ) {
             DEBUG_PRINT("fade-led[");
             DEBUG_PRINTDEC(ledIndex);
             DEBUG_PRINTDECLN("]-percent: ", activePercent);
         }
+#endif
         backV = fade(inactiveColorV, activeColorV, activePercent);    
     }
     if ( overlayV > backV ) {
@@ -471,9 +502,6 @@ void LedRunner::updateRunner() {
 }
 CHSV LedRunner::ledColor(int ledIndex) {
     if ( ( ledIndex <= activeLed + 1  ) && ( ledIndex > activeLed - glowNumLeds ) ) {
-//        if ( ledIndex == activeLed ) {
-//            return CHSV(runnerColorH, 255, 255);
-//        } else if ( ledIndex == activeLed + 1 ) {
         if ( ledIndex == activeLed + 1 ) {
             uint8_t fadeInH = 255 * ( ( cycleTimestamp - startTime ) % runnerLedSpeed) / runnerLedSpeed;
             return CHSV(runnerColorH, 255, fadeInH);
@@ -482,6 +510,7 @@ CHSV LedRunner::ledColor(int ledIndex) {
             long glowDiff = cycleTimestamp - startTime - ( ledIndex * runnerLedSpeed);
             uint8_t fadeOutH = 255 * ( glowTime - glowDiff ) / glowTime;
 
+#ifdef DEBUG_RUNNER_LED
             if (ledIndex == 5) {
                 DEBUG_PRINT("time: ");
                 DEBUG_PRINTDEC(cycleTimestamp - startTime);
@@ -493,6 +522,7 @@ CHSV LedRunner::ledColor(int ledIndex) {
                 DEBUG_PRINTDEC(glowTime);
                 DEBUG_PRINTDECLN(", fadeOutH: ", fadeOutH);
             }
+#endif
             return CHSV(runnerColorH, 255, fadeOutH);
         }
     } else {
