@@ -445,7 +445,6 @@ void LedRunner::start(uint8_t leafID, int numLeds, long runnerSpeed, uint8_t run
     this->hueChangeInterval = hueChangeInterval;
     this->hueLastChanged = cycleTimestamp;
     this->startTime = cycleTimestamp - runnerLedSpeed;
-    updateActiveLed();
 
 #ifdef DEBUG_RUNNER
     DEBUG_PRINT("runner - start, leafID: ");
@@ -463,16 +462,10 @@ void LedRunner::updateHue() {
         this->runnerColorH += hueChange;
     }
 }
-void LedRunner::updateActiveLed() {
-    activeLed =  ( numLeds * ( cycleTimestamp - startTime ) ) / runnerSpeed; 
-#ifdef DEBUG_RUNNER_ACTIVE_LED
-    DEBUG_PRINTDECLN("runner - active led: ", activeLed);
-#endif
-}
+
 void LedRunner::updateRunner() {
-    updateActiveLed();
     updateHue();
-    if ( activeLed > (numLeds + glowNumLeds) ) {
+    if ( cycleTimestamp > startTime + numLeds * runnerLedSpeed  + CONFIG_RUNNER_FADE_IN_DURATION_MS + CONFIG_RUNNER_PULS_DURATION_MS + CONFIG_RUNNER_GLOW_DURATION_MS ) {
 #ifdef DEBUG_RUNNER
         DEBUG_PRINTLN("runner - finished");
 #endif

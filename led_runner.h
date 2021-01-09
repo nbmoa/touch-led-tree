@@ -12,7 +12,6 @@ struct LedRunner {
     uint8_t hueChange;     // amout of hue change in on interval
     long hueChangeInterval; // interval ms the change of the hue value is applied
     
-    int activeLed;
     long hueLastChanged;
     long startTime;
 
