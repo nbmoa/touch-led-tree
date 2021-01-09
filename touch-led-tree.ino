@@ -30,16 +30,19 @@
 #define CONFIG_LEAF2_NUM_LEDS    12
 #define CONFIG_LEAF3_NUM_LEDS    12
 #define CONFIG_LEAF4_NUM_LEDS    12
-// PIN configuration
+// PIN configuration - Leaf 1
 #define CONFIG_LEAF1_PIN_SEND    2
 #define CONFIG_LEAF1_PIN_RECEIVE 3
 #define CONFIG_LEAF1_PIN_LED     4
+// PIN configuration - Leaf 2
 #define CONFIG_LEAF2_PIN_SEND    5
 #define CONFIG_LEAF2_PIN_RECEIVE 6
 #define CONFIG_LEAF2_PIN_LED     7
+// PIN configuration - Leaf 3
 #define CONFIG_LEAF3_PIN_SEND    8
 #define CONFIG_LEAF3_PIN_RECEIVE 9
 #define CONFIG_LEAF3_PIN_LED     10
+// PIN configuration - Leaf 4
 #define CONFIG_LEAF4_PIN_SEND    11
 #define CONFIG_LEAF4_PIN_RECEIVE 12
 #define CONFIG_LEAF4_PIN_LED     13
@@ -451,11 +454,11 @@ void RunnerCluster::update() {
  }
 ///////////////////////////////////////////////////////////
 
-///////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // LedRunner
-///////////////////////////////////////////////////////////
-// MOA DONE - not yet
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// starts the runner, overwriting the current state of the runner
 void LedRunner::start(uint8_t leafID, int numLeds, long runnerSpeed, uint8_t runnerColorH, uint8_t hueChange, int hueChangeInterval, int fadeInSpeed, int actLedDuration, int fadeOutSpeed) {
 // Update the runner state variables
     this->active = true;
@@ -487,9 +490,10 @@ void LedRunner::start(uint8_t leafID, int numLeds, long runnerSpeed, uint8_t run
     PRINTDEC(actLedDuration);
     PRINTDECLN(", fadeOut: ", fadeOutSpeed);
 #endif
-
 }
 
+// updateRunner updates the runners hue value and the active state of the runner
+// needs to be called once per cycle, before calling getLedColor
 void LedRunner::updateRunner() {
     // Updated runner hue if needed
     if ( cycleTimestamp > hueLastChanged + hueChangeInterval ) {
@@ -506,6 +510,10 @@ void LedRunner::updateRunner() {
     }
 }
 
+// getLedColor returns the color of a led for the given moment
+// returns CHSV h value of the runner and
+//              s 255
+//              v defined by the envelope definiton of the runner (0 transperent, 255 solid)
 CHSV LedRunner::getLedColor(int ledIndex, long now) {
     long offStart =  ledIndex * runnerLedSpeed + startTime;
     uint8_t colorV = 0;
@@ -522,7 +530,7 @@ CHSV LedRunner::getLedColor(int ledIndex, long now) {
 }
 
 
-///////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ///////////////////////////////////////////////////////////
 // SenseSensor
