@@ -1,8 +1,4 @@
-#define LED_LEAF_MAX_LEDS_PER_STRIP                    CONFIG_MAX_LEDS_PER_STRIP
-#define LED_LEAF_MIN_RUNNER_START_INTERVAL_MS          200
-#define LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE             CONFIG_RUNNER_HUE_CHANGE
-#define LED_LEAF_DEFAULT_RUNNER_HUE_CHANGE_INTERVAL_MS CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS
-#define LED_LEAF_DEFAULT_RUNNER_GLOW_NUM_LEDS          CONFIG_RUNNER_GLOW_NUM_LEDS
+
 struct LedLeaf {
     uint8_t leafID;    // ID of the leaf
     int     numLeds;    // Number of leds of the leaf
@@ -17,7 +13,7 @@ struct LedLeaf {
 
     uint8_t hueOffset;
 
-    CRGB leds[LED_LEAF_MAX_LEDS_PER_STRIP];
+    CRGB leds[CONFIG_MAX_LEDS_PER_LEAF];
 
     RunnerCluster   *runnerCluster;
     SenseSensor     sensor;
