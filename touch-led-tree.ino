@@ -1,10 +1,10 @@
 
-//#define DEBUG 1
-//#define ENABLE_DEBUG_PRINTS 1
+#define DEBUG 1
+#define ENABLE_DEBUG_PRINTS 1
 //#define DEBUG_CYCLES 1
 //#define DEBUG_SENSOR 1
 //#define DEBUG_SENSOR_RAW_SENSE 1
-//#define DEBUG_RUNNER 1
+#define DEBUG_RUNNER 1
 //#define DEBUG_RUNNER_GLOW 1
 //#define DEBUG_RUNNER_ACTIVE_LED 1
 //#define DEBUG_SPRITE 1
@@ -27,6 +27,10 @@
 #define CONFIG_RUNNER_HUE_CHANGE  20
 #define CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS 200
 #define CONFIG_RUNNER_START_HUE_INCREMENT 16
+
+#define CONFIG_RUNNER_FADE_IN_DURATION_MS 100
+#define CONFIG_RUNNER_PULS_DURATION_MS 300
+#define CONFIG_RUNNER_GLOW_DURATION_MS 500
 
 // PIN configuration
 #define CONFIG_SENSE1_PIN_SEND    2
@@ -288,7 +292,6 @@ void LedLeaf::runCycle(uint8_t rainbowH, uint8_t rainbowS, bool finalDance){
     for ( int i = 0; i < numLeds; i++ ) {
         CHSV ledBackColor = background.getLedBackColor(i, storedTime.storedTime, rainbowH + hueOffset, rainbowS, overlayV);
         CHSV ledSprite = runnerCluster->getLedSprite(leafID, i);
-
         CHSV ledValue = draw(ledBackColor, ledSprite);
 
         leds[i] = ledValue;
@@ -407,7 +410,7 @@ CHSV RunnerCluster::getLedSprite(uint8_t leafID, int ledIndex) {
 
     for ( int i = 0; i < RUNNER_CLUSTER_MAX_ACTIVE_RUNNERS; i++ ) {
         if ( runner[i].active && ( runner[i].leafID == leafID ) ) {
-            ledSprite = overlaySprites(ledSprite, runner[i].ledColor(ledIndex));
+            ledSprite = overlaySprites(ledSprite, runner[i].getLedColor(ledIndex, cycleTimestamp));
         }
     }
     return ledSprite;
@@ -449,7 +452,7 @@ void LedRunner::start(uint8_t leafID, int numLeds, long runnerSpeed, uint8_t run
     DEBUG_PRINTDEC(leafID);
     DEBUG_PRINT(", color: ");
     DEBUG_PRINTDEC(runnerColorH);
-    DEBUG_PRINTDECLN(", glowNumLeds: ", glowNumLeds);
+    DEBUG_PRINTDECLN(", startTime: ", startTime);
 #endif
 
 }
@@ -476,36 +479,22 @@ void LedRunner::updateRunner() {
         this->active = false;
     }
 }
-CHSV LedRunner::ledColor(int ledIndex) {
-    if ( ( ledIndex <= activeLed + 1  ) && ( ledIndex > activeLed - glowNumLeds ) ) {
-//        if ( ledIndex == activeLed ) {
-//            return CHSV(runnerColorH, 255, 255);
-//        } else if ( ledIndex == activeLed + 1 ) {
-        if ( ledIndex == activeLed + 1 ) {
-            uint8_t fadeInH = 255 * ( ( cycleTimestamp - startTime ) % runnerLedSpeed) / runnerLedSpeed;
-            return CHSV(runnerColorH, 255, fadeInH);
-        } else {
-            long glowTime = (glowNumLeds * runnerLedSpeed);
-            long glowDiff = cycleTimestamp - startTime - ( ledIndex * runnerLedSpeed);
-            uint8_t fadeOutH = 255 * ( glowTime - glowDiff ) / glowTime;
 
-//            if (ledIndex == 5) {
-//                DEBUG_PRINT("time: ");
-//                DEBUG_PRINTDEC(cycleTimestamp - startTime);
-//                DEBUG_PRINT(", glowDiff: ");
-//                DEBUG_PRINTDEC(glowDiff);
-//                DEBUG_PRINT(", speed: ");
-//                DEBUG_PRINTDEC(runnerLedSpeed);
-//                DEBUG_PRINT(", glowTime: ");
-//                DEBUG_PRINTDEC(glowTime);
-//                DEBUG_PRINTDECLN(", fadeOutH: ", fadeOutH);
-//            }
-            return CHSV(runnerColorH, 255, fadeOutH);
-        }
-    } else {
-        return CHSV(runnerColorH, 255, CONFIG_TRANSPARENT_V);
+CHSV LedRunner::getLedColor(int ledIndex, long now) {
+    long offStart =  ledIndex * runnerLedSpeed + startTime;
+    uint8_t colorV = 0;
+
+    if ( now >= offStart  && now < offStart + CONFIG_RUNNER_FADE_IN_DURATION_MS) {
+        colorV = 255 * ( now - offStart ) / CONFIG_RUNNER_FADE_IN_DURATION_MS;
+    } else if ( now >= offStart + CONFIG_RUNNER_FADE_IN_DURATION_MS && now < offStart + CONFIG_RUNNER_FADE_IN_DURATION_MS + CONFIG_RUNNER_PULS_DURATION_MS) {
+        colorV = 255;
+    } else if ( now >= offStart + CONFIG_RUNNER_FADE_IN_DURATION_MS + CONFIG_RUNNER_PULS_DURATION_MS && now < offStart + CONFIG_RUNNER_FADE_IN_DURATION_MS + CONFIG_RUNNER_PULS_DURATION_MS + CONFIG_RUNNER_GLOW_DURATION_MS) {
+        colorV = 255 * ( CONFIG_RUNNER_GLOW_DURATION_MS - ( now - ( offStart + CONFIG_RUNNER_FADE_IN_DURATION_MS + CONFIG_RUNNER_PULS_DURATION_MS ) ) ) / CONFIG_RUNNER_GLOW_DURATION_MS;
     }
+
+    return CHSV(runnerColorH, 255, colorV);
 }
+
 
 ///////////////////////////////////////////////////////////
 

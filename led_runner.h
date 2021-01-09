@@ -20,5 +20,5 @@ struct LedRunner {
     void updateHue();
     void updateActiveLed();
     void updateRunner();
-    CHSV ledColor(int ledIndex);
+    CHSV getLedColor(int ledIndex, long now);
 };
