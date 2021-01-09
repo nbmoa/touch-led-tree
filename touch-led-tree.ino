@@ -190,7 +190,7 @@ void TouchTree::loop() {
                 this->rainbowS += CONFIG_RAINBOW_FADE_INTERVAL;
             }
         } else {
-            if ( runnerCluster.executedRunners > CONFIG_RAINBOW_NEEDED_RUNNERS_FOR_RETRIGGER ) {
+            if ( runnerCluster.executedRunnerCnt > CONFIG_RAINBOW_NEEDED_RUNNERS_FOR_RETRIGGER ) {
                 PRINTLN("INFO: retrigger rainbow dance");
                 triggerRainbow();
             } else {
@@ -317,7 +317,7 @@ void LedLeaf::runCycle(uint8_t rainbowH, uint8_t rainbowS, bool finalDance){
     // update the leds based on the stored time and the active runners of the leaf
     for ( int i = 0; i < numLeds; i++ ) {
         CHSV ledBackColor = background.getLedBackColor(i, storedTime.storedTime, rainbowH + hueOffset, rainbowS, overlayV);
-        CHSV ledSprite = runnerCluster->getLedSprite(leafID, i);
+        CHSV ledSprite = runnerCluster->getLedSprite(leafID, i, cycleTimestamp);
         CHSV ledValue = draw(ledBackColor, ledSprite);
 
         leds[i] = ledValue;
@@ -415,33 +415,35 @@ void StoredTime::reset() {
 
 ///////////////////////////////////////////////////////////
 
-///////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // RunnerCluster
-///////////////////////////////////////////////////////////
-// MOA checked
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// tries to trigger a new runner
 void RunnerCluster::triggerRunner(uint8_t leafID, int numLeds, long runnerSpeed, uint8_t runnerColorH, uint8_t hueChange, long hueChangeInterval) {
     for ( int i = 0; i < CONFIG_MAX_ACTIVE_RUNNERS; i++ ) {
         if ( !runner[i].active ) {
             runner[i].start(leafID, numLeds, runnerSpeed, runnerColorH, hueChange, hueChangeInterval, runnerSpeed / 20, runnerSpeed / 10, runnerSpeed / 5);
-            executedRunners += 1;
+            executedRunnerCnt += 1;
             return;
         }
     }
     PRINTLN("ERROR: failed to trigger new runner");
 }
 
-CHSV RunnerCluster::getLedSprite(uint8_t leafID, int ledIndex) {
+// getLedSprite gets the sprite for a given ledLeaf, overlaying all runners
+CHSV RunnerCluster::getLedSprite(uint8_t leafID, int ledIndex, long now) {
     CHSV ledSprite = CHSV(0, 255, CONFIG_TRANSPARENT_V);
 
     for ( int i = 0; i < CONFIG_MAX_ACTIVE_RUNNERS; i++ ) {
         if ( runner[i].active && ( runner[i].leafID == leafID ) ) {
-            ledSprite = overlaySprites(ledSprite, runner[i].getLedColor(ledIndex, cycleTimestamp));
+            ledSprite = overlaySprites(ledSprite, runner[i].getLedColor(ledIndex, now));
         }
     }
     return ledSprite;
 }
 
+// update updates all runners of the runner cluster, needed to be called before getLedSprite and triggerRunner
 void RunnerCluster::update() {
     for ( int i = 0; i < CONFIG_MAX_ACTIVE_RUNNERS; i++ ) {
         if ( runner[i].active == true ) {
@@ -449,10 +451,12 @@ void RunnerCluster::update() {
         }
     }
 }
- void RunnerCluster::reset() {
-    this->executedRunners = 0;
- }
-///////////////////////////////////////////////////////////
+
+// reset resets the exexutedRunners count
+void RunnerCluster::reset() {
+   this->executedRunnerCnt = 0;
+}
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // LedRunner
@@ -528,8 +532,6 @@ CHSV LedRunner::getLedColor(int ledIndex, long now) {
 
     return CHSV(runnerColorH, 255, colorV);
 }
-
-
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ///////////////////////////////////////////////////////////
