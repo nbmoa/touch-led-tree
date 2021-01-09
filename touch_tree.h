@@ -1,4 +1,4 @@
-#define TOUCH_TREE_NUM_STRIPS 4
+#define TOUCH_TREE_NUM_STRIPS 4 
 
 #define TOUCH_TREE_LED_TYPE WS2812B             // WS2812B LED strips are used
 #define TOUCH_TREE_COLOR_ORDER GRB              // WS2812B LED strips have GRB color order
