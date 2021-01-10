@@ -3,7 +3,7 @@
 // Setup the debug environment
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-//#define DEBUG 1
+#define DEBUG 1
 //#define DEBUG_RUNNER 1
 //#define DEBUG_SENSE_SENSOR 0 // turns on logging for all sensors
 //#define DEBUG_SENSE_SENSOR CONFIG_LEAF1_PIN_RECEIVE // turns on logging for sensor of leaf1
@@ -24,6 +24,8 @@
 #define CONFIG_LED_TYPE WS2812B             // WS2812B LED strips are used
 #define CONFIG_COLOR_ORDER GRB              // WS2812B LED strips have GRB color order
 #define CONFIG_DEFAULT_BRIGHTNESS 64        // TBD what is the range is 64 max?
+#define CONFIG_COLOR_TEMPERATUR 0xFF7029    // see https://forum.arduino.cc/index.php?topic=569832.msg3881649#msg3881649
+#define CONFIG_BRIGHTNESS_INTERVAL 500
 
 // configuration of the hardware setup
 #define CONFIG_NUM_LEAFS 4  
@@ -69,7 +71,7 @@
 #define CONFIG_RUNNER_HUE_CHANGE  20
 #define CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS 200
 #define CONFIG_RUNNER_START_HUE_INCREMENT 16
-#define CONFIG_RUNNER_AUTO_TRIGGER_MS 4000
+#define CONFIG_RUNNER_AUTO_TRIGGER_MS 0   // 0 disables the autorunner
 
 #define CONFIG_MIN_RUNNER_START_INTERVAL_MS          200
 
@@ -131,6 +133,7 @@ TouchTree::TouchTree()
         LedLeaf(3, CONFIG_LEAF3_NUM_LEDS, CONFIG_LEAF3_PIN_SEND, CONFIG_LEAF3_PIN_RECEIVE, CONFIG_BACKGROUND_ACTIVE_V, CONFIG_BACKGROUND_INACTIVE_V, 2000, 1000, 20000, 4, 1, 1000, 4000, &this->runnerCluster),
         LedLeaf(4, CONFIG_LEAF4_NUM_LEDS, CONFIG_LEAF4_PIN_SEND, CONFIG_LEAF4_PIN_RECEIVE, CONFIG_BACKGROUND_ACTIVE_V, CONFIG_BACKGROUND_INACTIVE_V, 2000, 1000, 20000, 4, 1, 1000, 4000, &this->runnerCluster),
     }),
+    brightness(CONFIG_DEFAULT_BRIGHTNESS),
     runnerCluster() {
 }
 
@@ -157,7 +160,8 @@ void TouchTree::setup() {
     }
 
     // TBD not sure about this
-    FastLED.setBrightness(CONFIG_DEFAULT_BRIGHTNESS);
+    FastLED.setTemperature(CONFIG_COLOR_TEMPERATUR);
+    FastLED.setBrightness(brightness);
 }
 
 void TouchTree::loop() {
@@ -212,7 +216,18 @@ void TouchTree::loop() {
             levelUp();
         }
     }
-    
+
+    if ( curCycleTimestamp > lastBrightnessUpdate + CONFIG_BRIGHTNESS_INTERVAL ) {
+        lastBrightnessUpdate = curCycleTimestamp;
+        brightness += random(3)-1;
+        if ( brightness < CONFIG_DEFAULT_BRIGHTNESS - 10) {
+            CONFIG_DEFAULT_BRIGHTNESS - 10;  
+        }
+        if ( brightness > CONFIG_DEFAULT_BRIGHTNESS + 10) {
+            CONFIG_DEFAULT_BRIGHTNESS + 10;  
+        }
+        FastLED.setBrightness(brightness);
+    }
     FastLED.show();
     
     
@@ -305,17 +320,20 @@ void LedLeaf::runCycle(uint8_t rainbowH, uint8_t rainbowS, bool finalDance, long
             if ( now - lastRunnerStartTime > CONFIG_MIN_RUNNER_START_INTERVAL_MS ) {
                 this->hueOffset += CONFIG_RUNNER_START_HUE_INCREMENT;
                 if ( leafID == 1 || leafID == 3 ) {
-                    runnerCluster->triggerRunner(leafID, numLeds, runnerBaseTime, rainbowH + hueOffset + 128, random(CONFIG_RUNNER_HUE_CHANGE), CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS, now);                
+                    long runnerSpeed = runnerBaseTime;
+                    runnerCluster->triggerRunner(leafID, numLeds, runnerSpeed, rainbowH + hueOffset + 128, random(CONFIG_RUNNER_HUE_CHANGE * 2) - CONFIG_RUNNER_HUE_CHANGE, CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS, runnerSpeed / 8, runnerSpeed / 4, runnerSpeed / 2, now);                
                     lastRunnerStartTime = now;
                 } else {
-                    runnerCluster->triggerRunner(leafID, numLeds, runnerBaseTime + random(runnerDiffTime), rainbowH + hueOffset + 128, random(CONFIG_RUNNER_HUE_CHANGE), CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS, now);                
+                    long runnerSpeed = runnerBaseTime + random(runnerDiffTime);
+                    runnerCluster->triggerRunner(leafID, numLeds, runnerSpeed, rainbowH + hueOffset + 128, random(CONFIG_RUNNER_HUE_CHANGE * 2) - CONFIG_RUNNER_HUE_CHANGE, CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS, runnerSpeed / 8, runnerSpeed / 4, runnerSpeed / 2, now);                
                     lastRunnerStartTime = now;
                 }
             }
         }
     } else {
-        if ( now - lastRunnerStartTime > CONFIG_RUNNER_AUTO_TRIGGER_MS ) {
-            runnerCluster->triggerRunner(leafID, numLeds, runnerBaseTime + runnerDiffTime, rainbowH + hueOffset + 128, CONFIG_RUNNER_HUE_CHANGE, CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS, now);                
+        if ( CONFIG_RUNNER_AUTO_TRIGGER_MS != 0 && now - lastRunnerStartTime > CONFIG_RUNNER_AUTO_TRIGGER_MS ) {
+            long runnerSpeed = runnerBaseTime + runnerDiffTime;
+            runnerCluster->triggerRunner(leafID, numLeds, runnerSpeed, rainbowH + hueOffset + 128, random(CONFIG_RUNNER_HUE_CHANGE * 2) - CONFIG_RUNNER_HUE_CHANGE, CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS, runnerSpeed / 8, runnerSpeed / 4, runnerSpeed / 2, now);                
             lastRunnerStartTime = now;
         }
     }
@@ -428,10 +446,10 @@ void StoredTime::reset() {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // triggerRunner tries to trigger a new runner
-void RunnerCluster::triggerRunner(uint8_t leafID, int numLeds, long runnerSpeed, uint8_t runnerColorH, uint8_t hueChange, long hueChangeInterval, long now) {
+void RunnerCluster::triggerRunner(uint8_t leafID, int numLeds, long runnerSpeed, uint8_t runnerColorH, uint8_t hueChange, long hueChangeInterval, int fadeIn, int actDur, int fadeOut, long now) {
     for ( int i = 0; i < CONFIG_MAX_ACTIVE_RUNNERS; i++ ) {
         if ( !runner[i].active ) {
-            runner[i].start(leafID, numLeds, runnerSpeed, runnerColorH, hueChange, hueChangeInterval, runnerSpeed / 20, runnerSpeed / 10, runnerSpeed / 5, now);
+            runner[i].start(leafID, numLeds, runnerSpeed, runnerColorH, hueChange, hueChangeInterval, fadeIn, actDur, fadeOut, now);
             executedRunnerCnt += 1;
             return;
         }

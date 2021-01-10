@@ -10,6 +10,8 @@ struct TouchTree {
     uint8_t treeH;
     uint8_t treeS;
     long    hueInterval;
+    int     lastBrightnessUpdate;
+    uint8_t brightness;
 
     TouchTree();
     void setup();
