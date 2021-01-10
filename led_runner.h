@@ -21,7 +21,7 @@ struct LedRunner {
     int fadeOutSpeed;
 
     // methods of therunner
-    void start(uint8_t leafID, int numLeds, long runnerSpeed, uint8_t runnerColorH, uint8_t hueChange, int hueChangeInterval, int fadeInSpeed, int actLedDuration, int fadeOutSpeed);
-    void updateRunner();
+    void start(uint8_t leafID, int numLeds, long runnerSpeed, uint8_t runnerColorH, uint8_t hueChange, int hueChangeInterval, int fadeInSpeed, int actLedDuration, int fadeOutSpeed, long now);
+    void updateRunner(long now);
     CHSV getLedColor(int ledIndex, long now);
 };

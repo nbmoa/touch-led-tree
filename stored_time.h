@@ -8,6 +8,6 @@ struct StoredTime {
     long lastCycleTimestamp; // timestamp of last measurement
 
     StoredTime(uint8_t incRatio, uint8_t decRatio, long minTime, long maxTime);
-    void update(bool sensed);
+    void update(bool sensed, long now);
     void reset();
 };

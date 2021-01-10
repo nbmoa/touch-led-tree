@@ -34,7 +34,7 @@ struct LedLeaf {
             long    runnerBaseTime,
             long    runnerDiffTime,
             RunnerCluster *runnerCluster);
-    void runCycle(uint8_t rainbowC, uint8_t rainbowS, bool finalDance);
+    void runCycle(uint8_t rainbowC, uint8_t rainbowS, bool finalDance, long now);
     void doSetup();
     void reset();
 };

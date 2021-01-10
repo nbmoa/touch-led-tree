@@ -5,10 +5,12 @@
 
 //#define DEBUG 1
 //#define DEBUG_RUNNER 1
+//#define DEBUG_SENSE_SENSOR 0 // turns on logging for all sensors
+//#define DEBUG_SENSE_SENSOR CONFIG_LEAF1_PIN_RECEIVE // turns on logging for sensor of leaf1
+
 // TBC
 //#define DEBUG_CYCLES 1
-//#define DEBUG_SENSOR 1
-//#define DEBUG_SENSOR_RAW_SENSE 1
+//#define DEBUG_SENSE_SENSOR // turns on logging for all sensors
 //#define DEBUG_SPRITE 1
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -52,12 +54,10 @@
 
 // TBC
 
-#define CONFIG_SENSE_MEASUREMENT_SAMPLES 1
-#define CONFIG_SENSE_DISABLE_TIMEOUT_MS 20 // timeout for the measurement that disables the sense measurement for CONFIG_SENSE_ENABLE_RETRY_INTERVAL_MS
-#define CONFIG_SENSE_SENSE_ACTIVE_THREASHOLD CONFIG_SENSE_ACTIVE_THREASHOLD
-
-#define CONFIG_SENSE_ACTIVE_THREASHOLD        100
-#define CONFIG_SENSE_ENABLE_RETRY_INTERVAL_MS 10000
+#define CONFIG_SENSE_MEASUREMENT_SAMPLES      1     // samples done per measurement
+#define CONFIG_SENSE_DISABLE_TIMEOUT_MS       20    // timeout for the measurement that disables the sense measurement for CONFIG_SENSE_ENABLE_RETRY_INTERVAL_MS
+#define CONFIG_SENSE_SENSE_ACTIVE_THREASHOLD  100   // sense threashold to count as active 
+#define CONFIG_SENSE_ENABLE_RETRY_INTERVAL_MS 10000 // retry interval for disabled sensors
 
 #define CONFIG_BACKGROUND_ACTIVE_V   255
 #define CONFIG_BACKGROUND_INACTIVE_V 60
@@ -69,6 +69,7 @@
 #define CONFIG_RUNNER_HUE_CHANGE  20
 #define CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS 200
 #define CONFIG_RUNNER_START_HUE_INCREMENT 16
+#define CONFIG_RUNNER_AUTO_TRIGGER_MS 4000
 
 #define CONFIG_MIN_RUNNER_START_INTERVAL_MS          200
 
@@ -99,9 +100,6 @@
 ///////////////////////////////////////////////////////////
 // MOA OK
 
-// cycle timestamp (global var because its used in many places
-long cycleTimestamp;
-
 // defined globaly so it will be a static struct
 TouchTree touchTree;
 
@@ -128,10 +126,10 @@ void loop()
     
 TouchTree::TouchTree()
     :ledLeaf({
-        LedLeaf(1, CONFIG_LEAF1_NUM_LEDS, CONFIG_LEAF1_PIN_SEND, CONFIG_LEAF1_PIN_RECEIVE, CONFIG_BACKGROUND_ACTIVE_V, CONFIG_BACKGROUND_INACTIVE_V, 1000, 1000, 20000, 4, 1, 1000, 4000, &this->runnerCluster),
-        LedLeaf(2, CONFIG_LEAF2_NUM_LEDS, CONFIG_LEAF2_PIN_SEND, CONFIG_LEAF2_PIN_RECEIVE, CONFIG_BACKGROUND_ACTIVE_V, CONFIG_BACKGROUND_INACTIVE_V, 1000, 1000, 20000, 4, 1, 1000, 4000, &this->runnerCluster),
-        LedLeaf(3, CONFIG_LEAF3_NUM_LEDS, CONFIG_LEAF3_PIN_SEND, CONFIG_LEAF3_PIN_RECEIVE, CONFIG_BACKGROUND_ACTIVE_V, CONFIG_BACKGROUND_INACTIVE_V, 1000, 1000, 20000, 4, 1, 1000, 4000, &this->runnerCluster),
-        LedLeaf(4, CONFIG_LEAF4_NUM_LEDS, CONFIG_LEAF4_PIN_SEND, CONFIG_LEAF4_PIN_RECEIVE, CONFIG_BACKGROUND_ACTIVE_V, CONFIG_BACKGROUND_INACTIVE_V, 1000, 1000, 20000, 4, 1, 1000, 4000, &this->runnerCluster),
+        LedLeaf(1, CONFIG_LEAF1_NUM_LEDS, CONFIG_LEAF1_PIN_SEND, CONFIG_LEAF1_PIN_RECEIVE, CONFIG_BACKGROUND_ACTIVE_V, CONFIG_BACKGROUND_INACTIVE_V, 2000, 1000, 20000, 4, 1, 1000, 4000, &this->runnerCluster),
+        LedLeaf(2, CONFIG_LEAF2_NUM_LEDS, CONFIG_LEAF2_PIN_SEND, CONFIG_LEAF2_PIN_RECEIVE, CONFIG_BACKGROUND_ACTIVE_V, CONFIG_BACKGROUND_INACTIVE_V, 2000, 1000, 20000, 4, 1, 1000, 4000, &this->runnerCluster),
+        LedLeaf(3, CONFIG_LEAF3_NUM_LEDS, CONFIG_LEAF3_PIN_SEND, CONFIG_LEAF3_PIN_RECEIVE, CONFIG_BACKGROUND_ACTIVE_V, CONFIG_BACKGROUND_INACTIVE_V, 2000, 1000, 20000, 4, 1, 1000, 4000, &this->runnerCluster),
+        LedLeaf(4, CONFIG_LEAF4_NUM_LEDS, CONFIG_LEAF4_PIN_SEND, CONFIG_LEAF4_PIN_RECEIVE, CONFIG_BACKGROUND_ACTIVE_V, CONFIG_BACKGROUND_INACTIVE_V, 2000, 1000, 20000, 4, 1, 1000, 4000, &this->runnerCluster),
     }),
     runnerCluster() {
 }
@@ -164,11 +162,11 @@ void TouchTree::setup() {
 
 void TouchTree::loop() {
     // First update the timestamp
-    long lastCycleTimestamp = cycleTimestamp;
-    cycleTimestamp = millis();
+    long lastCycleTimestamp = curCycleTimestamp;
+    curCycleTimestamp = millis();
 
     // Update the runners
-    runnerCluster.update();
+    runnerCluster.update(curCycleTimestamp);
 
     rainbowH += CONFIG_RAINBOW_H_INTERVAL;
 
@@ -183,7 +181,7 @@ void TouchTree::loop() {
     } else {
         rainbowH += CONFIG_RAINBOW_H_FINISHED_INTERVAL;
 
-        if ( cycleTimestamp < (rainbowStartTime + CONFIG_RAINBOW_DURATION_MS) ) {
+        if ( curCycleTimestamp < (rainbowStartTime + CONFIG_RAINBOW_DURATION_MS) ) {
             if (rainbowS + CONFIG_RAINBOW_FADE_INTERVAL > 255 ) {
                 this->rainbowS = 255;
             } else {
@@ -202,7 +200,7 @@ void TouchTree::loop() {
 
     bool done = true;
     for (int index = 0; index < CONFIG_NUM_LEAFS; index++) {
-        ledLeaf[index].runCycle(rainbowH + (index * 64), rainbowS, rainbowStartTime != 0);
+        ledLeaf[index].runCycle(rainbowH + (index * 64), rainbowS, rainbowStartTime != 0, curCycleTimestamp);
         if ( ledLeaf[index].storedTime.storedTime < ledLeaf[index].background.timePerLed * ledLeaf[index].numLeds ) {
             done = false;
         }
@@ -229,7 +227,7 @@ void TouchTree::loop() {
 };
 
 void TouchTree::triggerRainbow() {
-    rainbowStartTime = cycleTimestamp;
+    rainbowStartTime = curCycleTimestamp;
     runnerCluster.reset();
 }
  
@@ -272,7 +270,7 @@ LedLeaf::LedLeaf(uint8_t leafID,
       background(backgroundActiveColorV, backgroundInactiveColorV, timePerLed) {
 }
 
-void LedLeaf::runCycle(uint8_t rainbowH, uint8_t rainbowS, bool finalDance){
+void LedLeaf::runCycle(uint8_t rainbowH, uint8_t rainbowS, bool finalDance, long now){
     // Read in the sensor
     bool sensed =  sensor.sense();
 #ifdef DEBUG_SENSOR
@@ -287,7 +285,7 @@ void LedLeaf::runCycle(uint8_t rainbowH, uint8_t rainbowS, bool finalDance){
 
     // Update storedTime
     if ( !finalDance ) {
-        storedTime.update(sensed);
+        storedTime.update(sensed, now);
     
         if ( overlayV != 0 ) {
             if ( overlayV - CONFIG_OVERLAY_SPEED < 0 ) {
@@ -301,15 +299,24 @@ void LedLeaf::runCycle(uint8_t rainbowH, uint8_t rainbowS, bool finalDance){
     }
     
     // Handle new timers
-    if ( sensed == true && previousSenseState == false ) {
-        //try to start a new runner if CONFIG_MIN_RUNNER_START_INTERVAL_MS already elapsed since last started runner
-        if ( cycleTimestamp - lastRunnerStartTime > CONFIG_MIN_RUNNER_START_INTERVAL_MS ) {
-            this->hueOffset += CONFIG_RUNNER_START_HUE_INCREMENT;
-            if ( leafID == 1 || leafID == 3 ) {
-                runnerCluster->triggerRunner(leafID, numLeds, runnerBaseTime, rainbowH + hueOffset + 128, random(CONFIG_RUNNER_HUE_CHANGE), CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS);                
-            } else {
-                runnerCluster->triggerRunner(leafID, numLeds, runnerBaseTime + random(runnerDiffTime), rainbowH + hueOffset + 128, random(CONFIG_RUNNER_HUE_CHANGE), CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS);                
+    if ( sensed == true ) {
+        if ( previousSenseState == false ) {
+            //try to start a new runner if CONFIG_MIN_RUNNER_START_INTERVAL_MS already elapsed since last started runner
+            if ( now - lastRunnerStartTime > CONFIG_MIN_RUNNER_START_INTERVAL_MS ) {
+                this->hueOffset += CONFIG_RUNNER_START_HUE_INCREMENT;
+                if ( leafID == 1 || leafID == 3 ) {
+                    runnerCluster->triggerRunner(leafID, numLeds, runnerBaseTime, rainbowH + hueOffset + 128, random(CONFIG_RUNNER_HUE_CHANGE), CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS, now);                
+                    lastRunnerStartTime = now;
+                } else {
+                    runnerCluster->triggerRunner(leafID, numLeds, runnerBaseTime + random(runnerDiffTime), rainbowH + hueOffset + 128, random(CONFIG_RUNNER_HUE_CHANGE), CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS, now);                
+                    lastRunnerStartTime = now;
+                }
             }
+        }
+    } else {
+        if ( now - lastRunnerStartTime > CONFIG_RUNNER_AUTO_TRIGGER_MS ) {
+            runnerCluster->triggerRunner(leafID, numLeds, runnerBaseTime + runnerDiffTime, rainbowH + hueOffset + 128, CONFIG_RUNNER_HUE_CHANGE, CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS, now);                
+            lastRunnerStartTime = now;
         }
     }
     previousSenseState = sensed;
@@ -317,7 +324,7 @@ void LedLeaf::runCycle(uint8_t rainbowH, uint8_t rainbowS, bool finalDance){
     // update the leds based on the stored time and the active runners of the leaf
     for ( int i = 0; i < numLeds; i++ ) {
         CHSV ledBackColor = background.getLedBackColor(i, storedTime.storedTime, rainbowH + hueOffset, rainbowS, overlayV);
-        CHSV ledSprite = runnerCluster->getLedSprite(leafID, i, cycleTimestamp);
+        CHSV ledSprite = runnerCluster->getLedSprite(leafID, i, now);
         CHSV ledValue = draw(ledBackColor, ledSprite);
 
         leds[i] = ledValue;
@@ -389,23 +396,23 @@ StoredTime::StoredTime(uint8_t incRatio, uint8_t decRatio, long minTime, long ma
       storedTime(minTime),
       lastCycleTimestamp(millis()) {}
 
-void StoredTime::update(bool sensed) {
+void StoredTime::update(bool sensed, long now) {
     if (sensed) {
         if ( storedTime < maxTime ) {
-            storedTime = storedTime + ( cycleTimestamp - lastCycleTimestamp ) * incRatio;
+            storedTime = storedTime + ( now - lastCycleTimestamp ) * incRatio;
             if ( storedTime > maxTime ) {
                 storedTime = maxTime;
             }
         }
     } else {
         if ( storedTime > minTime ) {
-            storedTime = storedTime - ( cycleTimestamp - lastCycleTimestamp ) * decRatio;
+            storedTime = storedTime - ( now - lastCycleTimestamp ) * decRatio;
             if ( storedTime < minTime ) { 
                 storedTime = minTime;
             }
         }
     }
-    lastCycleTimestamp = cycleTimestamp;
+    lastCycleTimestamp = now;
 }
 
 void StoredTime::reset() {
@@ -420,10 +427,10 @@ void StoredTime::reset() {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // tries to trigger a new runner
-void RunnerCluster::triggerRunner(uint8_t leafID, int numLeds, long runnerSpeed, uint8_t runnerColorH, uint8_t hueChange, long hueChangeInterval) {
+void RunnerCluster::triggerRunner(uint8_t leafID, int numLeds, long runnerSpeed, uint8_t runnerColorH, uint8_t hueChange, long hueChangeInterval, long now) {
     for ( int i = 0; i < CONFIG_MAX_ACTIVE_RUNNERS; i++ ) {
         if ( !runner[i].active ) {
-            runner[i].start(leafID, numLeds, runnerSpeed, runnerColorH, hueChange, hueChangeInterval, runnerSpeed / 20, runnerSpeed / 10, runnerSpeed / 5);
+            runner[i].start(leafID, numLeds, runnerSpeed, runnerColorH, hueChange, hueChangeInterval, runnerSpeed / 20, runnerSpeed / 10, runnerSpeed / 5, now);
             executedRunnerCnt += 1;
             return;
         }
@@ -444,10 +451,10 @@ CHSV RunnerCluster::getLedSprite(uint8_t leafID, int ledIndex, long now) {
 }
 
 // update updates all runners of the runner cluster, needed to be called before getLedSprite and triggerRunner
-void RunnerCluster::update() {
+void RunnerCluster::update(long now) {
     for ( int i = 0; i < CONFIG_MAX_ACTIVE_RUNNERS; i++ ) {
         if ( runner[i].active == true ) {
-            runner[i].updateRunner();
+            runner[i].updateRunner(now);
         }
     }
 }
@@ -463,10 +470,10 @@ void RunnerCluster::reset() {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // starts the runner, overwriting the current state of the runner
-void LedRunner::start(uint8_t leafID, int numLeds, long runnerSpeed, uint8_t runnerColorH, uint8_t hueChange, int hueChangeInterval, int fadeInSpeed, int actLedDuration, int fadeOutSpeed) {
+void LedRunner::start(uint8_t leafID, int numLeds, long runnerSpeed, uint8_t runnerColorH, uint8_t hueChange, int hueChangeInterval, int fadeInSpeed, int actLedDuration, int fadeOutSpeed, long now) {
 // Update the runner state variables
     this->active = true;
-    this->startTime = cycleTimestamp;
+    this->startTime = now;
     this->leafID = leafID;
     this->numLeds = numLeds;
     this->runnerSpeed = runnerSpeed;
@@ -474,7 +481,7 @@ void LedRunner::start(uint8_t leafID, int numLeds, long runnerSpeed, uint8_t run
     this->runnerColorH = runnerColorH;
     this->hueChange = hueChange;
     this->hueChangeInterval = hueChangeInterval;
-    this->hueLastChanged = cycleTimestamp;
+    this->hueLastChanged = now;
     this->fadeInSpeed = fadeInSpeed;
     this->actLedDuration = actLedDuration;
     this->fadeOutSpeed = fadeOutSpeed;
@@ -498,15 +505,15 @@ void LedRunner::start(uint8_t leafID, int numLeds, long runnerSpeed, uint8_t run
 
 // updateRunner updates the runners hue value and the active state of the runner
 // needs to be called once per cycle, before calling getLedColor
-void LedRunner::updateRunner() {
+void LedRunner::updateRunner(long now) {
     // Updated runner hue if needed
-    if ( cycleTimestamp > hueLastChanged + hueChangeInterval ) {
-        this->hueLastChanged = cycleTimestamp;
+    if ( now > hueLastChanged + hueChangeInterval ) {
+        this->hueLastChanged = now;
         this->runnerColorH += hueChange;
     }
 
     // Update active state of runner so it will be freed for reuse
-    if ( cycleTimestamp > startTime + numLeds * runnerLedSpeed  + fadeInSpeed + actLedDuration + fadeOutSpeed ) {
+    if ( now > startTime + numLeds * runnerLedSpeed  + fadeInSpeed + actLedDuration + fadeOutSpeed ) {
         this->active = false;
 #ifdef DEBUG_RUNNER
         PRINTDECLN("runner-end   - time: ", startTime);
@@ -534,53 +541,59 @@ CHSV LedRunner::getLedColor(int ledIndex, long now) {
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-///////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SenseSensor
-///////////////////////////////////////////////////////////
-// MOA checked
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-SenseSensor::SenseSensor(const uint8_t sendPin, const uint8_t sensePin): sendPin(sendPin), sensePin(sensePin), active(false), disabledSince(-CONFIG_SENSE_ENABLE_RETRY_INTERVAL_MS), sensor(sendPin,sensePin) {
+// constructor of the sense sensor
+SenseSensor::SenseSensor(const uint8_t sendPin, const uint8_t sensePin): sendPin(sendPin), sensePin(sensePin), enabled(false), disabledSince(-CONFIG_SENSE_ENABLE_RETRY_INTERVAL_MS), sensor(sendPin,sensePin) {
 }
 
+// doSetup setups the sensor
 void SenseSensor::doSetup() { 
+#ifdef DEBUG_SENSE_SENSOR
     PRINT("sendPin: ");
     PRINTDEC(sendPin);
     PRINTDECLN(", sensePin: ", sensePin);
+#endif
     
     sensor.set_CS_AutocaL_Millis(0xFFFFFFFF);
     sensor.set_CS_Timeout_Millis(CONFIG_SENSE_DISABLE_TIMEOUT_MS + 1);
 }
 
+// sense returns true or false for the sensor
 bool SenseSensor::sense() { 
-    if (active) {
-        long startTime = millis();
+    if (enabled) {
+        long startTime = millis(); // this needs to use millis so it actually just measures the time for the measurement of the sense sensor
         long senseVal = sensor.capacitiveSensor(CONFIG_SENSE_MEASUREMENT_SAMPLES);
         if ( (millis() - startTime ) > CONFIG_SENSE_DISABLE_TIMEOUT_MS) {
             PRINTDECLN("WARN: disable sensor because of timeout on pin ", sensePin);
-            this->active = false;
+            this->enabled = false;
             this->disabledSince = startTime;
         }
-#ifdef DEBUG_SENSOR_RAW_SENSE
-        PRINT("pin: ");
-        PRINTDEC(sensePin);
-        PRINTDECLN(", raw sense: ", senseVal);
+#ifdef DEBUG_SENSE_SENSOR
+        if ( DEBUG_SENSE_SENSOR == sensePin || DEBUG_SENSE_SENSOR == 0) {
+            PRINT("pin: ");
+            PRINTDEC(sensePin);
+            PRINTDECLN(", sense: ", senseVal);
+        }
 #endif
         return senseVal >= CONFIG_SENSE_SENSE_ACTIVE_THREASHOLD || senseVal <= -CONFIG_SENSE_SENSE_ACTIVE_THREASHOLD;
     } else {
-        if ( cycleTimestamp > disabledSince + CONFIG_SENSE_ENABLE_RETRY_INTERVAL_MS ) {
-            PRINTDECLN("WARN: try to enable sensor because retry interval elapsed on pin ", sensePin);
-            // This would also be a good place to recalibrate
-            this->active = true;
+        if ( millis() > disabledSince + CONFIG_SENSE_ENABLE_RETRY_INTERVAL_MS ) {
+#ifdef DEBUG_SENSE_SENSOR
+            PRINTDECLN("INFO: try to enable sensor because retry interval elapsed on pin ", sensePin);
+#endif
+            this->enabled = true;
         }
-        return active; // for disabled sensors this will create pulses in the CONFIG_SENSE_DISABLE_TIMEOUT_MS interval, should create nice runner effects if the sense is offline
+        return enabled; // for disabled sensors this will create pulses in the CONFIG_SENSE_DISABLE_TIMEOUT_MS interval, should create nice runner effects if the sense is offline
     }
 }
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-///////////////////////////////////////////////////////////
-
-///////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Helpers
-///////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // fade a h/s/v value by the given percentage
 uint8_t fade(uint8_t from, uint8_t to, int percent) {
@@ -632,5 +645,4 @@ CHSV draw(CHSV back, CHSV frame) {
     // and done
     return result;
 }
-
-///////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

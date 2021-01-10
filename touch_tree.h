@@ -1,10 +1,11 @@
 struct TouchTree {
-    long lastCycleTimestamp;
+    long curCycleTimestamp;   // current cycles timestamp
+    long lastCycleTimestamp;  // last cycle timestamp
 
-    RunnerCluster      runnerCluster;
-    LedLeaf ledLeaf[CONFIG_NUM_LEAFS];
+    RunnerCluster runnerCluster;              // led runner cluster
+    LedLeaf       ledLeaf[CONFIG_NUM_LEAFS];  // led leafs
 
-    long rainbowStartTime;
+    long rainbowStartTime;  //
     uint8_t rainbowH;
     uint8_t rainbowS;
 
