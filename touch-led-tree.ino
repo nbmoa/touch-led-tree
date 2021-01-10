@@ -74,11 +74,11 @@
 #define CONFIG_MIN_RUNNER_START_INTERVAL_MS          200
 
 
-#define CONFIG_RAINBOW_DURATION_MS   60000
-#define CONFIG_RAINBOW_FADE_INTERVAL 2
+#define CONFIG_TREE_DURATION_MS   60000
+#define CONFIG_TREE_FADE_INTERVAL     2
 #define CONFIG_OVERLAY_SPEED         4
-#define CONFIG_RAINBOW_H_INTERVAL          1
-#define CONFIG_RAINBOW_H_FINISHED_INTERVAL 3
+#define CONFIG_TREE_H_INTERVAL              1
+#define CONFIG_TREE_H_FINISHED_INTERVAL  3
 #define CONFIG_RAINBOW_NEEDED_RUNNERS_FOR_RETRIGGER 10
 
 #include <CapacitiveSensor.h>
@@ -168,31 +168,31 @@ void TouchTree::loop() {
     // Update the runners
     runnerCluster.update(curCycleTimestamp);
 
-    rainbowH += CONFIG_RAINBOW_H_INTERVAL;
+    treeH += CONFIG_TREE_H_INTERVAL;
 
-    if (rainbowStartTime == 0 ) {
-        if ( rainbowS > 0 ) {
-            if ( rainbowS - CONFIG_RAINBOW_FADE_INTERVAL < 0 ) {
-                rainbowS = 0;
+    if (levelStartTime == 0 ) {
+        if ( treeS > 0 ) {
+            if ( treeS - CONFIG_TREE_FADE_INTERVAL < 0 ) {
+                treeS = 0;
             } else {
-                rainbowS -= CONFIG_RAINBOW_FADE_INTERVAL;
+                treeS -= CONFIG_TREE_FADE_INTERVAL;
             }
         }
     } else {
-        rainbowH += CONFIG_RAINBOW_H_FINISHED_INTERVAL;
+        treeH += CONFIG_TREE_H_FINISHED_INTERVAL;
 
-        if ( curCycleTimestamp < (rainbowStartTime + CONFIG_RAINBOW_DURATION_MS) ) {
-            if (rainbowS + CONFIG_RAINBOW_FADE_INTERVAL > 255 ) {
-                this->rainbowS = 255;
+        if ( curCycleTimestamp < (levelStartTime + CONFIG_TREE_DURATION_MS) ) {
+            if (treeS + CONFIG_TREE_FADE_INTERVAL > 255 ) {
+                treeS = 255;
             } else {
-                this->rainbowS += CONFIG_RAINBOW_FADE_INTERVAL;
+                treeS += CONFIG_TREE_FADE_INTERVAL;
             }
         } else {
             if ( runnerCluster.executedRunnerCnt > CONFIG_RAINBOW_NEEDED_RUNNERS_FOR_RETRIGGER ) {
                 PRINTLN("INFO: retrigger rainbow dance");
-                triggerRainbow();
+                levelUp();
             } else {
-                rainbowStartTime = 0;
+                levelStartTime = 0;
                 reset();
             }
         }
@@ -200,16 +200,16 @@ void TouchTree::loop() {
 
     bool done = true;
     for (int index = 0; index < CONFIG_NUM_LEAFS; index++) {
-        ledLeaf[index].runCycle(rainbowH + (index * 64), rainbowS, rainbowStartTime != 0, curCycleTimestamp);
+        ledLeaf[index].runCycle(treeH + (index * 64), treeS, levelStartTime != 0, curCycleTimestamp);
         if ( ledLeaf[index].storedTime.storedTime < ledLeaf[index].background.timePerLed * ledLeaf[index].numLeds ) {
             done = false;
         }
     }
     
     if (done) {
-        if (rainbowStartTime == 0) {
-            PRINTLN("INFO: do the final rainbow dance");
-            triggerRainbow();
+        if (levelStartTime == 0) {
+            PRINTLN("INFO: level up the tree");
+            levelUp();
         }
     }
     
@@ -226,8 +226,8 @@ void TouchTree::loop() {
 #endif
 };
 
-void TouchTree::triggerRainbow() {
-    rainbowStartTime = curCycleTimestamp;
+void TouchTree::levelUp() {
+    levelStartTime = curCycleTimestamp;
     runnerCluster.reset();
 }
  
@@ -383,11 +383,11 @@ CHSV Background::getLedBackColor(int ledIndex,long storedTime, uint8_t backH, ui
 
 ///////////////////////////////////////////////////////////
 
-///////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // StoredTime
-///////////////////////////////////////////////////////////
-// MOA OK
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// constructor for the stored time
 StoredTime::StoredTime(uint8_t incRatio, uint8_t decRatio, long minTime, long maxTime)
     : incRatio(incRatio),
       decRatio(decRatio),
@@ -396,6 +396,7 @@ StoredTime::StoredTime(uint8_t incRatio, uint8_t decRatio, long minTime, long ma
       storedTime(minTime),
       lastCycleTimestamp(millis()) {}
 
+// update updates the stored time based on the given the and now and the lastCycleTimestamp
 void StoredTime::update(bool sensed, long now) {
     if (sensed) {
         if ( storedTime < maxTime ) {
@@ -415,18 +416,18 @@ void StoredTime::update(bool sensed, long now) {
     lastCycleTimestamp = now;
 }
 
+// reset resets the stored time
 void StoredTime::reset() {
     this->storedTime = minTime;
     this->lastCycleTimestamp = millis();
 }
-
-///////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // RunnerCluster
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// tries to trigger a new runner
+// triggerRunner tries to trigger a new runner
 void RunnerCluster::triggerRunner(uint8_t leafID, int numLeds, long runnerSpeed, uint8_t runnerColorH, uint8_t hueChange, long hueChangeInterval, long now) {
     for ( int i = 0; i < CONFIG_MAX_ACTIVE_RUNNERS; i++ ) {
         if ( !runner[i].active ) {

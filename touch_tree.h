@@ -5,13 +5,16 @@ struct TouchTree {
     RunnerCluster runnerCluster;              // led runner cluster
     LedLeaf       ledLeaf[CONFIG_NUM_LEAFS];  // led leafs
 
-    long rainbowStartTime;  //
-    uint8_t rainbowH;
-    uint8_t rainbowS;
+    uint8_t treeLevel;
+    long    levelStartTime;
+    uint8_t treeH;
+    uint8_t treeS;
+    long    hueInterval;
 
     TouchTree();
     void setup();
     void loop();
     void reset();
-    void triggerRainbow();
+    void levelUp();
+    void levelDown();
 };
