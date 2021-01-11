@@ -3,7 +3,7 @@
 // Setup the debug environment
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#define DEBUG 1
+//#define DEBUG 1
 //#define DEBUG_RUNNER 1
 //#define DEBUG_SENSE_SENSOR 0 // turns on logging for all sensors
 //#define DEBUG_SENSE_SENSOR CONFIG_LEAF1_PIN_RECEIVE // turns on logging for sensor of leaf1
@@ -64,6 +64,22 @@
 #define CONFIG_BACKGROUND_ACTIVE_V   255
 #define CONFIG_BACKGROUND_INACTIVE_V 60
 #define CONFIG_TRANSPARENT_V         0
+
+typedef enum BackgroundType { 
+    BACK_TYPE_FADE_V, 
+    BACK_TYPE_FADE_V_REVERSE, 
+    BACK_TYPE_FADE_S, 
+    BACK_TYPE_FADE_S_REVERSE, 
+    BACK_TYPE_NO_FADE
+} bg_type_t;
+
+
+#define LEVEL_0 0
+#define LEVEL_1 1
+#define LEVEL_2 2
+#define LEVEL_3 3
+#define LEVEL_4 4
+#define LEVEL_5 5
 
 #define CONFIG_BACK_TYPE_FADE_V  0
 #define CONFIG_BACK_TYPE_FADE_S  1
@@ -131,10 +147,10 @@ void loop()
     
 TouchTree::TouchTree()
     :ledLeaf({
-        LedLeaf(1, CONFIG_LEAF1_NUM_LEDS, CONFIG_LEAF1_PIN_SEND, CONFIG_LEAF1_PIN_RECEIVE, CONFIG_BACKGROUND_ACTIVE_V, CONFIG_BACKGROUND_INACTIVE_V, 2000, 1000, 20000, 4, 1, 1000, 4000, &this->runnerCluster),
-        LedLeaf(2, CONFIG_LEAF2_NUM_LEDS, CONFIG_LEAF2_PIN_SEND, CONFIG_LEAF2_PIN_RECEIVE, CONFIG_BACKGROUND_ACTIVE_V, CONFIG_BACKGROUND_INACTIVE_V, 2000, 1000, 20000, 4, 1, 1000, 4000, &this->runnerCluster),
-        LedLeaf(3, CONFIG_LEAF3_NUM_LEDS, CONFIG_LEAF3_PIN_SEND, CONFIG_LEAF3_PIN_RECEIVE, CONFIG_BACKGROUND_ACTIVE_V, CONFIG_BACKGROUND_INACTIVE_V, 2000, 1000, 20000, 4, 1, 1000, 4000, &this->runnerCluster),
-        LedLeaf(4, CONFIG_LEAF4_NUM_LEDS, CONFIG_LEAF4_PIN_SEND, CONFIG_LEAF4_PIN_RECEIVE, CONFIG_BACKGROUND_ACTIVE_V, CONFIG_BACKGROUND_INACTIVE_V, 2000, 1000, 20000, 4, 1, 1000, 4000, &this->runnerCluster),
+        LedLeaf(1, CONFIG_LEAF1_NUM_LEDS, CONFIG_LEAF1_PIN_SEND, CONFIG_LEAF1_PIN_RECEIVE, &this->runnerCluster),
+        LedLeaf(2, CONFIG_LEAF2_NUM_LEDS, CONFIG_LEAF2_PIN_SEND, CONFIG_LEAF2_PIN_RECEIVE, &this->runnerCluster),
+        LedLeaf(3, CONFIG_LEAF3_NUM_LEDS, CONFIG_LEAF3_PIN_SEND, CONFIG_LEAF3_PIN_RECEIVE, &this->runnerCluster),
+        LedLeaf(4, CONFIG_LEAF4_NUM_LEDS, CONFIG_LEAF4_PIN_SEND, CONFIG_LEAF4_PIN_RECEIVE, &this->runnerCluster),
     }),
     treeBrightness(CONFIG_DEFAULT_BRIGHTNESS),
     runnerCluster() {
@@ -143,28 +159,13 @@ TouchTree::TouchTree()
 void TouchTree::setup() {
     for (int index = 0; index < CONFIG_NUM_LEAFS; index++) {
         ledLeaf[index].doSetup();
-        // setup the led pins that control the led strips, based on the sense led pin
-        switch(ledLeaf[index].sensor.sensePin) {
-            case CONFIG_LEAF1_PIN_RECEIVE:
-                FastLED.addLeds<CONFIG_LED_TYPE, CONFIG_LEAF1_PIN_LED, CONFIG_COLOR_ORDER>(ledLeaf[index].leds, ledLeaf[index].numLeds); 
-                break;
-            case CONFIG_LEAF2_PIN_RECEIVE:
-                FastLED.addLeds<CONFIG_LED_TYPE, CONFIG_LEAF2_PIN_LED, CONFIG_COLOR_ORDER>(ledLeaf[index].leds, ledLeaf[index].numLeds); 
-                break;
-            case CONFIG_LEAF3_PIN_RECEIVE:
-                FastLED.addLeds<CONFIG_LED_TYPE, CONFIG_LEAF3_PIN_LED, CONFIG_COLOR_ORDER>(ledLeaf[index].leds, ledLeaf[index].numLeds); 
-                break;
-            case CONFIG_LEAF4_PIN_RECEIVE:
-                FastLED.addLeds<CONFIG_LED_TYPE, CONFIG_LEAF4_PIN_LED, CONFIG_COLOR_ORDER>(ledLeaf[index].leds, ledLeaf[index].numLeds); 
-                break;
-            default:
-                PRINTLN("ERROR: led pin strip unknown touch pin");
-        }
     }
 
-    // TBD not sure about this
+    // Not tries around much with this, see comment on CONFIG_COLOR_TEMPERATUR
     FastLED.setTemperature(CONFIG_COLOR_TEMPERATUR);
-    FastLED.setBrightness(treeBrightness);
+
+    // And now bring the tree to level 0
+    setLevel(LEVEL_0);
 }
 
 void TouchTree::loop() {
@@ -176,46 +177,10 @@ void TouchTree::loop() {
     runnerCluster.update(curCycleTimestamp);
 
     // now the the normal level opartions
-    // MOA TBD how to do the fades
-
- //   treeH += CONFIG_TREE_H_INTERVAL;
-
- //   if (levelStartTime == 0 ) {
- //       if ( treeS > 0 ) {
- //           if ( treeS - CONFIG_TREE_FADE_INTERVAL < 0 ) {
- //               treeS = 0;
- //           } else {
- //               treeS -= CONFIG_TREE_FADE_INTERVAL;
- //           }
- //       }
- //   } else {
- //       treeH += CONFIG_TREE_H_FINISHED_INTERVAL;
-
- //       if ( curCycleTimestamp < (levelStartTime + CONFIG_TREE_DURATION_MS) ) {
- //           if (treeS + CONFIG_TREE_FADE_INTERVAL > 255 ) {
- //               treeS = 255;
- //           } else {
- //               treeS += CONFIG_TREE_FADE_INTERVAL;
- //           }
- //       } else {
- //           if ( runnerCluster.executedRunnerCnt > CONFIG_RAINBOW_NEEDED_RUNNERS_FOR_RETRIGGER ) {
- //               PRINTLN("INFO: retrigger rainbow dance");
- //               levelUp();
- //           } else {
- //           }
- //       }
- //   }
-
-    for (int index = 0; index < CONFIG_NUM_LEAFS; index++) {
-        ledLeaf[index].runCycle(treeColorH, curCycleTimestamp);
-// MOA TBD
-//        if ( ledLeaf[index].score < ledLeaf[index].backScorePerLed * ledLeaf[index].numLeds ) {
-//            done = false;
-//        }
-    }
+    treeCycle();
 
     // check and do the level up/down things
-    doLevel();
+    checkLevelChange();
 
     // play a bit with the brightness each cycle
     updateBrightness();
@@ -233,7 +198,28 @@ void TouchTree::loop() {
 #endif
 };
 
-void TouchTree::doLevel() {
+void TouchTree::treeCycle() {
+    switch(treeLevel) {
+        case LEVEL_0:
+            break;
+        case LEVEL_1:
+            break;
+        case LEVEL_2:
+            break;
+        case LEVEL_3:
+            break;
+        case LEVEL_4:
+            break;
+        case LEVEL_5:
+            break;
+    }
+ 
+    for (int index = 0; index < CONFIG_NUM_LEAFS; index++) {
+        ledLeaf[index].runCycle(treeColorH, curCycleTimestamp);
+    }
+}
+
+void TouchTree::checkLevelChange() {
     bool canLevelUp = true;
     bool canLevelDown = true;
     for (int index = 0; index < CONFIG_NUM_LEAFS; index++) {
@@ -244,18 +230,65 @@ void TouchTree::doLevel() {
             canLevelDown = false;
         }
     }
+    // Handling additional global tree checks here
     switch (treeLevel) {
-        case 0:
+        case LEVEL_0:
+            // We should never go below level 0
             canLevelDown = false;
             break;
-        case 1:
+        case LEVEL_1:
+            break;
+        case LEVEL_2:
+            break;
+        case LEVEL_3:
+            break;
+        case LEVEL_4:
+            break;
+        case LEVEL_5:
+            // We should never go bejond the last level
             canLevelUp = false;
             break;
     }
     if ( canLevelUp ) {
-        levelUp();
+        setLevel(treeLevel + 1);
     } else if ( canLevelDown ) {
-        levelDown();
+        setLevel(treeLevel - 1);
+    }
+}
+
+
+void TouchTree::setLevel(uint8_t level) {
+    treeLevel = level;
+    levelStartTime = curCycleTimestamp;
+    runnerCluster.reset();
+    for (int index = 0; index < CONFIG_NUM_LEAFS; index++) {
+        switch (treeLevel) {
+            case LEVEL_0:
+                // fill up the white, no runner
+                ledLeaf[index].setLevel(60000,0, 120000, 8, 1, index * 64, BACK_TYPE_FADE_V, 255, 60, 0, 0, 0, 0);
+                break;
+            case LEVEL_1:
+                // fill up the color , no runner
+                ledLeaf[index].setLevel(60000,0, 120000, 8, 1, index * 64, BACK_TYPE_FADE_S, 255, 0, 255, 0, 0, 0);
+                break;
+            case LEVEL_2:
+                // each runner earns score, reverse level, fadeout v
+                ledLeaf[index].setLevel(60000,5000, 120000, 0, 1, index * 64, BACK_TYPE_FADE_V_REVERSE, 255, 60, 255, 0, 1000, 0);
+                break;
+            case LEVEL_3:
+                // every time a leaf has the same color as the other leaf it gets a score, runner but no score
+                ledLeaf[index].setLevel(60000,5000, 120000, 0, 0, index * 64, BACK_TYPE_FADE_V, 255, 60, 255, 0, 1000, 0);
+                break;
+            case LEVEL_4:
+                // sense to fill it up and the last scores need to be done by the runner
+                ledLeaf[index].setLevel(60000,0, 120000, 4, 1, index * 64, BACK_TYPE_FADE_S_REVERSE, 255, 0, 0, 255, 1000, 0);
+                break;
+            case LEVEL_5:
+                // TBD
+                // this should have a party mode, and go from white to color rainbow back to white, ...
+                ledLeaf[index].setLevel(60000,0, 120000, 0, 1, index * 64, BACK_TYPE_NO_FADE, 255, 0, 255, 0, 1000, 5000);
+                break;
+        }
     }
 }
 
@@ -273,30 +306,6 @@ void TouchTree::updateBrightness() {
     }
 }
 
-void TouchTree::levelUp() {
-    treeLevel++;
-    levelStartTime = curCycleTimestamp;
-    runnerCluster.reset();
-    for (int index = 0; index < CONFIG_NUM_LEAFS; index++) {
-        ledLeaf[index].setLevel(treeLevel);
-    }
-}
-
-void TouchTree::levelDown() {
-    treeLevel--;
-    levelStartTime = curCycleTimestamp;
-    runnerCluster.reset();
-    for (int index = 0; index < CONFIG_NUM_LEAFS; index++) {
-        ledLeaf[index].setLevel(treeLevel);
-    }
-}
- 
-void TouchTree::reset() {
-    runnerCluster.reset();
-    for (int index = 0; index < CONFIG_NUM_LEAFS; index++) {
-        ledLeaf[index].reset();
-    }
-}
 ///////////////////////////////////////////////////////////
 
 ///////////////////////////////////////////////////////////
@@ -307,25 +316,70 @@ LedLeaf::LedLeaf(uint8_t leafID,
                  int     numLeds,
                  uint8_t sendPin,
                  uint8_t sensePin,
-                 uint8_t backgroundActiveColorV,
-                 uint8_t backgroundInactiveColorV,
-                 long    timePerLed,
-                 long    timeMinStored,
-                 long    timeMaxStoredOffset,
-                 uint8_t timeIncRatio,
-                 uint8_t timeDecRatio,
-                 long    runnerBaseTime,
-                 long    runnerDiffTime,
                  RunnerCluster *runnerCluster)
     : leafID(leafID),
       numLeds(numLeds),
-      runnerBaseTime(runnerBaseTime),
-      runnerDiffTime(runnerDiffTime),
-      sensePreviousState(false),
-      lastRunnerStartTime(-CONFIG_MIN_RUNNER_START_INTERVAL_MS - 1),
-      leafColorHueOffset((leafID - 1) * 64),
       runnerCluster(runnerCluster),
-      sensor(sendPin, sensePin) {
+      sensor(sendPin, sensePin),
+      lastRunnerStartTime(-100000) {
+}
+
+
+void LedLeaf::setLevel(
+    long scoreNextLevel,
+    long scoreMin,
+    long scoreMax,
+    uint8_t scoreIncRatio,
+    uint8_t scoreDecRatio,
+    uint8_t colorHueOffset,
+    uint8_t backType,
+    uint8_t backActiveV,
+    uint8_t backInactiveV,
+    uint8_t backActiveS,
+    uint8_t backInactiveS,
+    long runnerBaseTime,
+    long runnerDiffTime
+    ) {
+
+    this->sensePreviousState = false;
+    this->score = scoreMin;
+    this->scoreNextLevel = scoreNextLevel;
+    this->scorePerLed = scoreNextLevel / numLeds;
+    this->scoreMin = scoreMin;
+    this->scoreMax = scoreMax;
+    this->scoreIncTimeRatio = scoreIncRatio;
+    this->scoreDecTimeRatio = scoreDecRatio;
+    this->leafColorHueOffset = colorHueOffset;
+    this->backCompositionType = backType;
+    this->backActiveColorV = backActiveV;
+    this->backInactiveColorV = backInactiveV;
+    this->backActiveColorS = backActiveS;
+    this->backInactiveColorS = backInactiveS;
+    this->runnerBaseTime = runnerBaseTime;
+    this->runnerDiffTime = runnerDiffTime;
+}
+
+void LedLeaf::doSetup() {
+    // setup the led pins that control the led strips, based on the sense led pin
+    switch(sensor.sensePin) {
+        case CONFIG_LEAF1_PIN_RECEIVE:
+            FastLED.addLeds<CONFIG_LED_TYPE, CONFIG_LEAF1_PIN_LED, CONFIG_COLOR_ORDER>(leds, numLeds); 
+            break;
+        case CONFIG_LEAF2_PIN_RECEIVE:
+            FastLED.addLeds<CONFIG_LED_TYPE, CONFIG_LEAF2_PIN_LED, CONFIG_COLOR_ORDER>(leds, numLeds); 
+            break;
+        case CONFIG_LEAF3_PIN_RECEIVE:
+            FastLED.addLeds<CONFIG_LED_TYPE, CONFIG_LEAF3_PIN_LED, CONFIG_COLOR_ORDER>(leds, numLeds); 
+            break;
+        case CONFIG_LEAF4_PIN_RECEIVE:
+            FastLED.addLeds<CONFIG_LED_TYPE, CONFIG_LEAF4_PIN_LED, CONFIG_COLOR_ORDER>(leds, numLeds); 
+            break;
+        default:
+            PRINTLN("ERROR: led pin strip unknown touch pin");
+        }
+
+    // setup the sensor
+    sensor.doSetup();
 }
 
 void LedLeaf::runCycle(uint8_t treeH, long now){
@@ -342,21 +396,6 @@ void LedLeaf::runCycle(uint8_t treeH, long now){
       PRINTDECLN(", sense: OFF, time: ", storedTime.storedTime);
     }
 #endif
-
-//    // Update storedTime
-//    if ( !finalDance ) {
-//        storedTime.update(sensed, now);
-//    
-//        if ( overlayV != 0 ) {
-//            if ( overlayV - CONFIG_OVERLAY_SPEED < 0 ) {
-//                this->overlayV = 0;
-//            } else {
-//                this->overlayV -= CONFIG_OVERLAY_SPEED;
-//            }
-//        }
-//    } else {
-//        this->overlayV = 255;
-//    }
     
     // Handle new timers
     if ( sensed == true ) {
@@ -394,18 +433,8 @@ void LedLeaf::runCycle(uint8_t treeH, long now){
     }
 }
 
-void LedLeaf::doSetup() {
-    // led initialization is done in the TouchTree
-
-    // setup the sensor
-    sensor.doSetup();
-}
-
 void LedLeaf::reset() {
     score = scoreMin;
-}
-
-void LedLeaf::setLevel(uint8_t level) {
 }
 
 bool LedLeaf::canLevelUp() {
@@ -443,42 +472,42 @@ void LedLeaf::updateScore(bool sensed, long now) {
 }
 
 CHSV LedLeaf::getLedBackColor(int ledIndex,long score, uint8_t backH) {
-    long scoreNeededForLed = ledIndex * backScorePerLed;
+    long scoreNeededForLed = ledIndex * scorePerLed;
 
     uint8_t backV = backActiveColorV;
     uint8_t backS = backActiveColorS;
 
     switch(backCompositionType) {
-        case CONFIG_BACK_TYPE_FADE_V:
+        case BACK_TYPE_FADE_V:
             // first handle the simple leds
-            if ( score >= scoreNeededForLed + backScorePerLed ) {
+            if ( score >= scoreNeededForLed + scorePerLed ) {
                 backV = backActiveColorV;
             } else if ( score < scoreNeededForLed ) {
                 backV = backInactiveColorV;
             } else {
                 // And now the last that needs fading
-                int activePercent = 100 * ( score - scoreNeededForLed ) / backScorePerLed;
+                int activePercent = 100 * ( score - scoreNeededForLed ) / scorePerLed;
                 backV = fade(backInactiveColorV, backActiveColorV, activePercent);    
             }
             break;;
-        case CONFIG_BACK_TYPE_FADE_S:
+        case BACK_TYPE_FADE_S:
             // first handle the simple leds
-            if ( score >= scoreNeededForLed + backScorePerLed ) {
+            if ( score >= scoreNeededForLed + scorePerLed ) {
                 backS = backActiveColorS;
             } else if ( score < scoreNeededForLed ) {
                 backS = backInactiveColorS;
             } else {
                 // And now the last that needs fading
-                int activePercent = 100 * ( score - scoreNeededForLed ) / backScorePerLed;
+                int activePercent = 100 * ( score - scoreNeededForLed ) / scorePerLed;
                 backS = fade(backInactiveColorS, backActiveColorS, activePercent);    
             }
             break;;
-        case CONFIG_BACK_TYPE_NO_FADE:
+        case BACK_TYPE_NO_FADE:
             break;;
+        default:
+            PRINTDECLN("WARN: backCompositionType not handled ", backCompositionType);
     }
 
-
-    // MOA TBD it was backH - ledIndex first ( I think this was to create spectrum over the led, but 1 is not enought for it
     return CHSV(backH, backS, backV);
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -16,8 +16,9 @@ struct TouchTree {
     void setup();
     void loop();
     void reset();
-    void doLevel();
-    void levelUp();
+    void checkLevelChange();
+    void setLevel(uint8_t newLevel);
+    void treeCycle();
     void levelDown();
     void updateBrightness();
     
