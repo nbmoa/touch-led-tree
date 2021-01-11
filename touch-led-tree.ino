@@ -7,9 +7,9 @@
 //#define DEBUG_RUNNER 1
 //#define DEBUG_SENSE_SENSOR 0 // turns on logging for all sensors
 //#define DEBUG_SENSE_SENSOR CONFIG_LEAF1_PIN_RECEIVE // turns on logging for sensor of leaf1
+//#define DEBUG_CYCLE_DELAYS 1
 
 // TBC
-//#define DEBUG_CYCLES 1
 //#define DEBUG_SENSE_SENSOR // turns on logging for all sensors
 //#define DEBUG_SPRITE 1
 
@@ -65,6 +65,10 @@
 #define CONFIG_BACKGROUND_INACTIVE_V 60
 #define CONFIG_TRANSPARENT_V         0
 
+#define CONFIG_BACK_TYPE_FADE_V  0
+#define CONFIG_BACK_TYPE_FADE_S  1
+#define CONFIG_BACK_TYPE_NO_FADE 2
+
 #define CONFIG_MAX_ACTIVE_RUNNERS 16
 #define CONFIG_RUNNER_GLOW_NUM_LEDS 4
 //#define CONFIG_RUNNER_COLOR       CHSV(64,255,255)
@@ -75,6 +79,7 @@
 
 #define CONFIG_MIN_RUNNER_START_INTERVAL_MS          200
 
+#define CONFIG_LEVEL_DOWN_IDLE_TIMEOUT 600000   // idle for 10 min levels down
 
 #define CONFIG_TREE_DURATION_MS   60000
 #define CONFIG_TREE_FADE_INTERVAL     2
@@ -92,8 +97,6 @@
 #include "sense_sensor.h"
 #include "led_runner.h"
 #include "runner_cluster.h"
-#include "background.h"
-#include "stored_time.h"
 #include "led_leaf.h"
 #include "touch_tree.h"
 
@@ -133,7 +136,7 @@ TouchTree::TouchTree()
         LedLeaf(3, CONFIG_LEAF3_NUM_LEDS, CONFIG_LEAF3_PIN_SEND, CONFIG_LEAF3_PIN_RECEIVE, CONFIG_BACKGROUND_ACTIVE_V, CONFIG_BACKGROUND_INACTIVE_V, 2000, 1000, 20000, 4, 1, 1000, 4000, &this->runnerCluster),
         LedLeaf(4, CONFIG_LEAF4_NUM_LEDS, CONFIG_LEAF4_PIN_SEND, CONFIG_LEAF4_PIN_RECEIVE, CONFIG_BACKGROUND_ACTIVE_V, CONFIG_BACKGROUND_INACTIVE_V, 2000, 1000, 20000, 4, 1, 1000, 4000, &this->runnerCluster),
     }),
-    brightness(CONFIG_DEFAULT_BRIGHTNESS),
+    treeBrightness(CONFIG_DEFAULT_BRIGHTNESS),
     runnerCluster() {
 }
 
@@ -161,7 +164,7 @@ void TouchTree::setup() {
 
     // TBD not sure about this
     FastLED.setTemperature(CONFIG_COLOR_TEMPERATUR);
-    FastLED.setBrightness(brightness);
+    FastLED.setBrightness(treeBrightness);
 }
 
 void TouchTree::loop() {
@@ -172,81 +175,124 @@ void TouchTree::loop() {
     // Update the runners
     runnerCluster.update(curCycleTimestamp);
 
-    treeH += CONFIG_TREE_H_INTERVAL;
+    // now the the normal level opartions
+    // MOA TBD how to do the fades
 
-    if (levelStartTime == 0 ) {
-        if ( treeS > 0 ) {
-            if ( treeS - CONFIG_TREE_FADE_INTERVAL < 0 ) {
-                treeS = 0;
-            } else {
-                treeS -= CONFIG_TREE_FADE_INTERVAL;
-            }
-        }
-    } else {
-        treeH += CONFIG_TREE_H_FINISHED_INTERVAL;
+ //   treeH += CONFIG_TREE_H_INTERVAL;
 
-        if ( curCycleTimestamp < (levelStartTime + CONFIG_TREE_DURATION_MS) ) {
-            if (treeS + CONFIG_TREE_FADE_INTERVAL > 255 ) {
-                treeS = 255;
-            } else {
-                treeS += CONFIG_TREE_FADE_INTERVAL;
-            }
-        } else {
-            if ( runnerCluster.executedRunnerCnt > CONFIG_RAINBOW_NEEDED_RUNNERS_FOR_RETRIGGER ) {
-                PRINTLN("INFO: retrigger rainbow dance");
-                levelUp();
-            } else {
-                levelStartTime = 0;
-                reset();
-            }
-        }
-    }
+ //   if (levelStartTime == 0 ) {
+ //       if ( treeS > 0 ) {
+ //           if ( treeS - CONFIG_TREE_FADE_INTERVAL < 0 ) {
+ //               treeS = 0;
+ //           } else {
+ //               treeS -= CONFIG_TREE_FADE_INTERVAL;
+ //           }
+ //       }
+ //   } else {
+ //       treeH += CONFIG_TREE_H_FINISHED_INTERVAL;
 
-    bool done = true;
+ //       if ( curCycleTimestamp < (levelStartTime + CONFIG_TREE_DURATION_MS) ) {
+ //           if (treeS + CONFIG_TREE_FADE_INTERVAL > 255 ) {
+ //               treeS = 255;
+ //           } else {
+ //               treeS += CONFIG_TREE_FADE_INTERVAL;
+ //           }
+ //       } else {
+ //           if ( runnerCluster.executedRunnerCnt > CONFIG_RAINBOW_NEEDED_RUNNERS_FOR_RETRIGGER ) {
+ //               PRINTLN("INFO: retrigger rainbow dance");
+ //               levelUp();
+ //           } else {
+ //           }
+ //       }
+ //   }
+
     for (int index = 0; index < CONFIG_NUM_LEAFS; index++) {
-        ledLeaf[index].runCycle(treeH + (index * 64), treeS, levelStartTime != 0, curCycleTimestamp);
-        if ( ledLeaf[index].storedTime.storedTime < ledLeaf[index].background.timePerLed * ledLeaf[index].numLeds ) {
-            done = false;
-        }
-    }
-    
-    if (done) {
-        if (levelStartTime == 0) {
-            PRINTLN("INFO: level up the tree");
-            levelUp();
-        }
+        ledLeaf[index].runCycle(treeColorH, curCycleTimestamp);
+// MOA TBD
+//        if ( ledLeaf[index].score < ledLeaf[index].backScorePerLed * ledLeaf[index].numLeds ) {
+//            done = false;
+//        }
     }
 
-    if ( curCycleTimestamp > lastBrightnessUpdate + CONFIG_BRIGHTNESS_INTERVAL ) {
-        lastBrightnessUpdate = curCycleTimestamp;
-        brightness += random(3)-1;
-        if ( brightness < CONFIG_DEFAULT_BRIGHTNESS - 10) {
-            CONFIG_DEFAULT_BRIGHTNESS - 10;  
-        }
-        if ( brightness > CONFIG_DEFAULT_BRIGHTNESS + 10) {
-            CONFIG_DEFAULT_BRIGHTNESS + 10;  
-        }
-        FastLED.setBrightness(brightness);
-    }
+    // check and do the level up/down things
+    doLevel();
+
+    // play a bit with the brightness each cycle
+    updateBrightness();
+    // and now update the leds
     FastLED.show();
     
-    
+    // do the cycle
     long timeRemain = (lastCycleTimestamp + CONFIG_UPDATE_INTERVAL) - millis();
     if (timeRemain > 0) {
         delay(timeRemain);
     }
 
-#ifdef DEBUG_CYCLES
-    PRINTDECLN("cycle-time-diff: ", timeRemain);
+#ifdef DEBUG_CYCLE_DELAYS
+    PRINTDECLN("cycle-delay: ", timeRemain);
 #endif
 };
 
+void TouchTree::doLevel() {
+    bool canLevelUp = true;
+    bool canLevelDown = true;
+    for (int index = 0; index < CONFIG_NUM_LEAFS; index++) {
+        if ( !ledLeaf[index].canLevelUp() ) {
+            canLevelUp = false;
+        }
+        if ( !ledLeaf[index].canLevelDown() ) {
+            canLevelDown = false;
+        }
+    }
+    switch (treeLevel) {
+        case 0:
+            canLevelDown = false;
+            break;
+        case 1:
+            canLevelUp = false;
+            break;
+    }
+    if ( canLevelUp ) {
+        levelUp();
+    } else if ( canLevelDown ) {
+        levelDown();
+    }
+}
+
+void TouchTree::updateBrightness() {
+    if ( curCycleTimestamp > treeBrightnessLastUpdate + CONFIG_BRIGHTNESS_INTERVAL ) {
+        treeBrightnessLastUpdate = curCycleTimestamp;
+        treeBrightness += random(3)-1;
+        if ( treeBrightness < CONFIG_DEFAULT_BRIGHTNESS - 10) {
+            CONFIG_DEFAULT_BRIGHTNESS - 10;  
+        }
+        if ( treeBrightness > CONFIG_DEFAULT_BRIGHTNESS + 10) {
+            CONFIG_DEFAULT_BRIGHTNESS + 10;  
+        }
+        FastLED.setBrightness(treeBrightness);
+    }
+}
+
 void TouchTree::levelUp() {
+    treeLevel++;
     levelStartTime = curCycleTimestamp;
     runnerCluster.reset();
+    for (int index = 0; index < CONFIG_NUM_LEAFS; index++) {
+        ledLeaf[index].setLevel(treeLevel);
+    }
+}
+
+void TouchTree::levelDown() {
+    treeLevel--;
+    levelStartTime = curCycleTimestamp;
+    runnerCluster.reset();
+    for (int index = 0; index < CONFIG_NUM_LEAFS; index++) {
+        ledLeaf[index].setLevel(treeLevel);
+    }
 }
  
 void TouchTree::reset() {
+    runnerCluster.reset();
     for (int index = 0; index < CONFIG_NUM_LEAFS; index++) {
         ledLeaf[index].reset();
     }
@@ -275,17 +321,16 @@ LedLeaf::LedLeaf(uint8_t leafID,
       numLeds(numLeds),
       runnerBaseTime(runnerBaseTime),
       runnerDiffTime(runnerDiffTime),
-      previousSenseState(false),
+      sensePreviousState(false),
       lastRunnerStartTime(-CONFIG_MIN_RUNNER_START_INTERVAL_MS - 1),
-      fullFade(0),
-      hueOffset((leafID - 1) * 64),
+      leafColorHueOffset((leafID - 1) * 64),
       runnerCluster(runnerCluster),
-      sensor(sendPin, sensePin),
-      storedTime(timeIncRatio, timeDecRatio, timeMinStored, (numLeds * timePerLed) + timeMaxStoredOffset),
-      background(backgroundActiveColorV, backgroundInactiveColorV, timePerLed) {
+      sensor(sendPin, sensePin) {
 }
 
-void LedLeaf::runCycle(uint8_t rainbowH, uint8_t rainbowS, bool finalDance, long now){
+void LedLeaf::runCycle(uint8_t treeH, long now){
+    uint8_t leafH = treeH + leafColorHueOffset;
+    
     // Read in the sensor
     bool sensed =  sensor.sense();
 #ifdef DEBUG_SENSOR
@@ -298,34 +343,34 @@ void LedLeaf::runCycle(uint8_t rainbowH, uint8_t rainbowS, bool finalDance, long
     }
 #endif
 
-    // Update storedTime
-    if ( !finalDance ) {
-        storedTime.update(sensed, now);
-    
-        if ( overlayV != 0 ) {
-            if ( overlayV - CONFIG_OVERLAY_SPEED < 0 ) {
-                this->overlayV = 0;
-            } else {
-                this->overlayV -= CONFIG_OVERLAY_SPEED;
-            }
-        }
-    } else {
-        this->overlayV = 255;
-    }
+//    // Update storedTime
+//    if ( !finalDance ) {
+//        storedTime.update(sensed, now);
+//    
+//        if ( overlayV != 0 ) {
+//            if ( overlayV - CONFIG_OVERLAY_SPEED < 0 ) {
+//                this->overlayV = 0;
+//            } else {
+//                this->overlayV -= CONFIG_OVERLAY_SPEED;
+//            }
+//        }
+//    } else {
+//        this->overlayV = 255;
+//    }
     
     // Handle new timers
     if ( sensed == true ) {
-        if ( previousSenseState == false ) {
+        if ( sensePreviousState == false ) {
             //try to start a new runner if CONFIG_MIN_RUNNER_START_INTERVAL_MS already elapsed since last started runner
             if ( now - lastRunnerStartTime > CONFIG_MIN_RUNNER_START_INTERVAL_MS ) {
-                this->hueOffset += CONFIG_RUNNER_START_HUE_INCREMENT;
+                this->leafColorHueOffset += CONFIG_RUNNER_START_HUE_INCREMENT;
                 if ( leafID == 1 || leafID == 3 ) {
                     long runnerSpeed = runnerBaseTime;
-                    runnerCluster->triggerRunner(leafID, numLeds, runnerSpeed, rainbowH + hueOffset + 128, random(CONFIG_RUNNER_HUE_CHANGE * 2) - CONFIG_RUNNER_HUE_CHANGE, CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS, runnerSpeed / 8, runnerSpeed / 4, runnerSpeed / 2, now);                
+                    runnerCluster->triggerRunner(leafID, numLeds, runnerSpeed, leafH + 128, random(CONFIG_RUNNER_HUE_CHANGE * 2) - CONFIG_RUNNER_HUE_CHANGE, CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS, runnerSpeed / 8, runnerSpeed / 4, runnerSpeed / 2, now);                
                     lastRunnerStartTime = now;
                 } else {
                     long runnerSpeed = runnerBaseTime + random(runnerDiffTime);
-                    runnerCluster->triggerRunner(leafID, numLeds, runnerSpeed, rainbowH + hueOffset + 128, random(CONFIG_RUNNER_HUE_CHANGE * 2) - CONFIG_RUNNER_HUE_CHANGE, CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS, runnerSpeed / 8, runnerSpeed / 4, runnerSpeed / 2, now);                
+                    runnerCluster->triggerRunner(leafID, numLeds, runnerSpeed, leafH + 128, random(CONFIG_RUNNER_HUE_CHANGE * 2) - CONFIG_RUNNER_HUE_CHANGE, CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS, runnerSpeed / 8, runnerSpeed / 4, runnerSpeed / 2, now);                
                     lastRunnerStartTime = now;
                 }
             }
@@ -333,15 +378,15 @@ void LedLeaf::runCycle(uint8_t rainbowH, uint8_t rainbowS, bool finalDance, long
     } else {
         if ( CONFIG_RUNNER_AUTO_TRIGGER_MS != 0 && now - lastRunnerStartTime > CONFIG_RUNNER_AUTO_TRIGGER_MS ) {
             long runnerSpeed = runnerBaseTime + runnerDiffTime;
-            runnerCluster->triggerRunner(leafID, numLeds, runnerSpeed, rainbowH + hueOffset + 128, random(CONFIG_RUNNER_HUE_CHANGE * 2) - CONFIG_RUNNER_HUE_CHANGE, CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS, runnerSpeed / 8, runnerSpeed / 4, runnerSpeed / 2, now);                
+            runnerCluster->triggerRunner(leafID, numLeds, runnerSpeed, leafH + 128, random(CONFIG_RUNNER_HUE_CHANGE * 2) - CONFIG_RUNNER_HUE_CHANGE, CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS, runnerSpeed / 8, runnerSpeed / 4, runnerSpeed / 2, now);                
             lastRunnerStartTime = now;
         }
     }
-    previousSenseState = sensed;
+    sensePreviousState = sensed;
 
     // update the leds based on the stored time and the active runners of the leaf
     for ( int i = 0; i < numLeds; i++ ) {
-        CHSV ledBackColor = background.getLedBackColor(i, storedTime.storedTime, rainbowH + hueOffset, rainbowS, overlayV);
+        CHSV ledBackColor = getLedBackColor(i, score, leafH);
         CHSV ledSprite = runnerCluster->getLedSprite(leafID, i, now);
         CHSV ledValue = draw(ledBackColor, ledSprite);
 
@@ -357,87 +402,84 @@ void LedLeaf::doSetup() {
 }
 
 void LedLeaf::reset() {
-    storedTime.reset();
+    score = scoreMin;
 }
 
-///////////////////////////////////////////////////////////
-
-///////////////////////////////////////////////////////////
-// Background
-///////////////////////////////////////////////////////////
-// MOA OK
-
-Background::Background(uint8_t activeColorV,
-                       uint8_t inactiveColorV,
-                       long timePerLed)
-    : activeColorV(activeColorV),
-      inactiveColorV(inactiveColorV),
-      timePerLed(timePerLed) {
+void LedLeaf::setLevel(uint8_t level) {
 }
 
-CHSV Background::getLedBackColor(int ledIndex,long storedTime, uint8_t backH, uint8_t backS, uint8_t overlayV) {
-    long storedTimeNeededForLed = ledIndex * timePerLed;
-
-    uint8_t backV;
-    // its inactive
-    if ( storedTime >= storedTimeNeededForLed + timePerLed ) {
-        backV = activeColorV;
-    } else if ( storedTime < storedTimeNeededForLed ) {
-        backV = inactiveColorV;
-    } else {
-        int activePercent = 100 * ( storedTime - storedTimeNeededForLed ) / timePerLed;
-//        if ( activePercent != 0 ) {
-//            PRINT("fade-led[");
-//            PRINTDEC(ledIndex);
-//            PRINTDECLN("]-percent: ", activePercent);
-//        }
-        backV = fade(inactiveColorV, activeColorV, activePercent);    
+bool LedLeaf::canLevelUp() {
+    if ( score >= scoreNextLevel ) {
+        return true;
     }
-    if ( overlayV > backV ) {
-        backV = overlayV;
-    }
-    return CHSV(backH-ledIndex, backS, backV);
+    return false;
 }
 
-///////////////////////////////////////////////////////////
+bool LedLeaf::canLevelDown() {
+    if ( millis() > lastSenseTimestamp + CONFIG_LEVEL_DOWN_IDLE_TIMEOUT ) {
+        return true;
+    }
+    return false;
+}
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// StoredTime
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-// constructor for the stored time
-StoredTime::StoredTime(uint8_t incRatio, uint8_t decRatio, long minTime, long maxTime)
-    : incRatio(incRatio),
-      decRatio(decRatio),
-      minTime(minTime),
-      maxTime(maxTime),
-      storedTime(minTime),
-      lastCycleTimestamp(millis()) {}
-
-// update updates the stored time based on the given the and now and the lastCycleTimestamp
-void StoredTime::update(bool sensed, long now) {
+// update updates the score based on the given the and now and the lastCycleTimestamp
+void LedLeaf::updateScore(bool sensed, long now) {
     if (sensed) {
-        if ( storedTime < maxTime ) {
-            storedTime = storedTime + ( now - lastCycleTimestamp ) * incRatio;
-            if ( storedTime > maxTime ) {
-                storedTime = maxTime;
+        if ( score < scoreMax ) {
+            score += ( now - lastCycleTimestamp ) * scoreIncTimeRatio;
+            if ( score > scoreMax ) {
+                score = scoreMax;
             }
         }
     } else {
-        if ( storedTime > minTime ) {
-            storedTime = storedTime - ( now - lastCycleTimestamp ) * decRatio;
-            if ( storedTime < minTime ) { 
-                storedTime = minTime;
+        if ( score > scoreMin ) {
+            score -= ( now - lastCycleTimestamp ) * scoreDecTimeRatio;
+            if ( score < scoreMin ) { 
+                score = scoreMin;
             }
         }
     }
     lastCycleTimestamp = now;
 }
 
-// reset resets the stored time
-void StoredTime::reset() {
-    this->storedTime = minTime;
-    this->lastCycleTimestamp = millis();
+CHSV LedLeaf::getLedBackColor(int ledIndex,long score, uint8_t backH) {
+    long scoreNeededForLed = ledIndex * backScorePerLed;
+
+    uint8_t backV = backActiveColorV;
+    uint8_t backS = backActiveColorS;
+
+    switch(backCompositionType) {
+        case CONFIG_BACK_TYPE_FADE_V:
+            // first handle the simple leds
+            if ( score >= scoreNeededForLed + backScorePerLed ) {
+                backV = backActiveColorV;
+            } else if ( score < scoreNeededForLed ) {
+                backV = backInactiveColorV;
+            } else {
+                // And now the last that needs fading
+                int activePercent = 100 * ( score - scoreNeededForLed ) / backScorePerLed;
+                backV = fade(backInactiveColorV, backActiveColorV, activePercent);    
+            }
+            break;;
+        case CONFIG_BACK_TYPE_FADE_S:
+            // first handle the simple leds
+            if ( score >= scoreNeededForLed + backScorePerLed ) {
+                backS = backActiveColorS;
+            } else if ( score < scoreNeededForLed ) {
+                backS = backInactiveColorS;
+            } else {
+                // And now the last that needs fading
+                int activePercent = 100 * ( score - scoreNeededForLed ) / backScorePerLed;
+                backS = fade(backInactiveColorS, backActiveColorS, activePercent);    
+            }
+            break;;
+        case CONFIG_BACK_TYPE_NO_FADE:
+            break;;
+    }
+
+
+    // MOA TBD it was backH - ledIndex first ( I think this was to create spectrum over the led, but 1 is not enought for it
+    return CHSV(backH, backS, backV);
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -616,7 +658,6 @@ bool SenseSensor::sense() {
 
 // fade a h/s/v value by the given percentage
 uint8_t fade(uint8_t from, uint8_t to, int percent) {
-    CHSV result;
     return from + ( percent * (to - from) / 100);
 }
 

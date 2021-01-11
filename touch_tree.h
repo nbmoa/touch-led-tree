@@ -7,16 +7,18 @@ struct TouchTree {
 
     uint8_t treeLevel;
     long    levelStartTime;
-    uint8_t treeH;
-    uint8_t treeS;
-    long    hueInterval;
-    int     lastBrightnessUpdate;
-    uint8_t brightness;
+    uint8_t treeColorH;
+    long    colorHInterval;
+    uint8_t treeBrightness;
+    long    treeBrightnessLastUpdate;
 
     TouchTree();
     void setup();
     void loop();
     void reset();
+    void doLevel();
     void levelUp();
     void levelDown();
+    void updateBrightness();
+    
 };
