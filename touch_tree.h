@@ -2,8 +2,8 @@ struct TouchTree {
     long curCycleTimestamp;   // current cycles timestamp
     long lastCycleTimestamp;  // last cycle timestamp
 
-    RunnerCluster runnerCluster;              // led runner cluster
     LedLeaf       ledLeaf[CONFIG_NUM_LEAFS];  // led leafs
+    RunnerCluster runnerCluster;              // led runner cluster
 
     uint8_t treeLevel;
     long    levelStartTime;
@@ -18,7 +18,8 @@ struct TouchTree {
     void reset();
     void checkLevelChange();
     void setLevel(uint8_t newLevel);
-    void treeCycle();
+    void runLevel();
+    void scoreLeafColor();
     void levelDown();
     void updateBrightness();
     
