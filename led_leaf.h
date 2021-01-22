@@ -36,9 +36,9 @@ struct LedLeaf {
     uint8_t runnerColorHOffsetChange; // amount leafColorHOffset is changed per started runner
     RunnerCluster *runnerCluster;   // pointer to the runner cluster of the tree
 
-    
-
     CRGB leds[CONFIG_MAX_LEDS_PER_LEAF];
+
+    long    flashLeafTimestamp;     // timestamp of the flash leaf event
 
     // methods of the LedLeaf
     LedLeaf(uint8_t leafID,
@@ -63,7 +63,8 @@ void setLevel(
     uint8_t backActiveS,
     uint8_t backInactiveS,
     long runnerBaseTime,
-    long runnerDiffTime
+    long runnerDiffTime,
+    long now
     );
     void runLevel(uint8_t treeH, long now);
     void doSetup();
@@ -76,4 +77,6 @@ void setLevel(
     bool canLevelUp();
     bool canLevelDown();
     void updateLeds(uint8_t leafH, long now);
+    void doScore(long scoreDiff, long now);
+    void doFlash(long now);
 };

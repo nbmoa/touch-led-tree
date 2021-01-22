@@ -3,14 +3,13 @@
 // Setup the debug environment
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-//#define DEBUG 1
+#define DEBUG 1
 //#define DEBUG_RUNNER 1
-//#define DEBUG_SENSE_SENSOR 0 // turns on logging for all sensors
+#define DEBUG_SENSE_SENSOR 0 // turns on logging for all sensors
 //#define DEBUG_SENSE_SENSOR CONFIG_LEAF1_PIN_RECEIVE // turns on logging for sensor of leaf1
 //#define DEBUG_CYCLE_DELAYS 1
 
 // TBC
-//#define DEBUG_SENSE_SENSOR // turns on logging for all sensors
 //#define DEBUG_SPRITE 1
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -28,12 +27,12 @@
 #define CONFIG_BRIGHTNESS_INTERVAL 500
 
 // configuration of the hardware setup
-#define CONFIG_NUM_LEAFS 4
-#define CONFIG_MAX_LEDS_PER_LEAF 12
-#define CONFIG_LEAF1_NUM_LEDS    12
-#define CONFIG_LEAF2_NUM_LEDS    12
-#define CONFIG_LEAF3_NUM_LEDS    12
-#define CONFIG_LEAF4_NUM_LEDS    12
+#define CONFIG_NUM_LEAFS         1
+#define CONFIG_MAX_LEDS_PER_LEAF 29
+#define CONFIG_LEAF1_NUM_LEDS    CONFIG_MAX_LEDS_PER_LEAF
+#define CONFIG_LEAF2_NUM_LEDS    CONFIG_MAX_LEDS_PER_LEAF
+#define CONFIG_LEAF3_NUM_LEDS    CONFIG_MAX_LEDS_PER_LEAF
+#define CONFIG_LEAF4_NUM_LEDS    CONFIG_MAX_LEDS_PER_LEAF
 // PIN configuration - Leaf 1
 #define CONFIG_LEAF1_PIN_SEND    2
 #define CONFIG_LEAF1_PIN_RECEIVE 3
@@ -57,7 +56,7 @@
 // TBC
 
 #define CONFIG_SENSE_MEASUREMENT_SAMPLES      1     // samples done per measurement
-#define CONFIG_SENSE_DISABLE_TIMEOUT_MS       20    // timeout for the measurement that disables the sense measurement for CONFIG_SENSE_ENABLE_RETRY_INTERVAL_MS
+#define CONFIG_SENSE_DISABLE_TIMEOUT_MS       40    // timeout for the measurement that disables the sense measurement for CONFIG_SENSE_ENABLE_RETRY_INTERVAL_MS
 #define CONFIG_SENSE_SENSE_ACTIVE_THREASHOLD  100   // sense threashold to count as active 
 #define CONFIG_SENSE_ENABLE_RETRY_INTERVAL_MS 10000 // retry interval for disabled sensors
 
@@ -81,11 +80,19 @@ typedef enum BackgroundType {
 #define LEVEL_4 4
 #define LEVEL_5 5
 
+#define CONFIG_INITIAL_LEVEL LEVEL_0
+
+#define CONFIG_SCORE_FLASH_MS 200
+
 #define CONFIG_BACK_TYPE_FADE_V  0
 #define CONFIG_BACK_TYPE_FADE_S  1
 #define CONFIG_BACK_TYPE_NO_FADE 2
 
-#define CONFIG_MAX_ACTIVE_RUNNERS 16
+#ifdef DEBUG
+ #define CONFIG_MAX_ACTIVE_RUNNERS 4
+#else
+ #define CONFIG_MAX_ACTIVE_RUNNERS 8
+#endif
 #define CONFIG_RUNNER_GLOW_NUM_LEDS 4
 //#define CONFIG_RUNNER_COLOR       CHSV(64,255,255)
 #define CONFIG_RUNNER_HUE_CHANGE  20
@@ -96,13 +103,6 @@ typedef enum BackgroundType {
 #define CONFIG_MIN_RUNNER_START_INTERVAL_MS          200
 
 #define CONFIG_LEVEL_DOWN_IDLE_TIMEOUT 600000   // idle for 10 min levels down
-
-#define CONFIG_TREE_DURATION_MS   60000
-#define CONFIG_TREE_FADE_INTERVAL     2
-#define CONFIG_OVERLAY_SPEED         4
-#define CONFIG_TREE_H_INTERVAL              1
-#define CONFIG_TREE_H_FINISHED_INTERVAL  3
-#define CONFIG_RAINBOW_NEEDED_RUNNERS_FOR_RETRIGGER 10
 
 #include <CapacitiveSensor.h>
 // This suppress the pragma warning of FastLED (see https://github.com/FastLED/FastLED/issues/797)
@@ -148,9 +148,9 @@ void loop()
 TouchTree::TouchTree()
   : ledLeaf( {
   LedLeaf(1, CONFIG_LEAF1_NUM_LEDS, CONFIG_LEAF1_PIN_SEND, CONFIG_LEAF1_PIN_RECEIVE, &this->runnerCluster),
-          LedLeaf(2, CONFIG_LEAF2_NUM_LEDS, CONFIG_LEAF2_PIN_SEND, CONFIG_LEAF2_PIN_RECEIVE, &this->runnerCluster),
-          LedLeaf(3, CONFIG_LEAF3_NUM_LEDS, CONFIG_LEAF3_PIN_SEND, CONFIG_LEAF3_PIN_RECEIVE, &this->runnerCluster),
-          LedLeaf(4, CONFIG_LEAF4_NUM_LEDS, CONFIG_LEAF4_PIN_SEND, CONFIG_LEAF4_PIN_RECEIVE, &this->runnerCluster),
+  //        LedLeaf(2, CONFIG_LEAF2_NUM_LEDS, CONFIG_LEAF2_PIN_SEND, CONFIG_LEAF2_PIN_RECEIVE, &this->runnerCluster),
+  //        LedLeaf(3, CONFIG_LEAF3_NUM_LEDS, CONFIG_LEAF3_PIN_SEND, CONFIG_LEAF3_PIN_RECEIVE, &this->runnerCluster),
+  //        LedLeaf(4, CONFIG_LEAF4_NUM_LEDS, CONFIG_LEAF4_PIN_SEND, CONFIG_LEAF4_PIN_RECEIVE, &this->runnerCluster),
   }),
   runnerCluster(),
   treeBrightness(CONFIG_DEFAULT_BRIGHTNESS) {
@@ -165,13 +165,16 @@ void TouchTree::setup() {
   FastLED.setTemperature(CONFIG_COLOR_TEMPERATUR);
 
   // And now bring the tree to level 0
-  setLevel(LEVEL_0);
+  setLevel(CONFIG_INITIAL_LEVEL);
 }
 
 void TouchTree::loop() {
   // First update the timestamp
   long lastCycleTimestamp = curCycleTimestamp;
   curCycleTimestamp = millis();
+
+  // play a bit with the brightness each cycle
+  updateBrightness();
 
   // Update the runners
   runnerCluster.update(curCycleTimestamp);
@@ -182,8 +185,6 @@ void TouchTree::loop() {
   // check and do the level up/down things
   checkLevelChange();
 
-  // play a bit with the brightness each cycle
-  updateBrightness();
   // and now update the leds
   FastLED.show();
 
@@ -270,7 +271,8 @@ void TouchTree::checkLevelChange() {
 }
 
 
-void TouchTree::setLevel(uint8_t level) {
+void TouchTree::setLevel(uint8_t level) {  
+  PRINTDECLN("treeLevel:", level);
   treeLevel = level;
   levelStartTime = curCycleTimestamp;
   runnerCluster.reset();
@@ -278,28 +280,28 @@ void TouchTree::setLevel(uint8_t level) {
     switch (treeLevel) {
       case LEVEL_0:
         // fill up the white, no runner
-        ledLeaf[index].setLevel(LEVEL_0, 60000, 0, 120000, 8, 1, 120000, 0, index * 64, 0, BACK_TYPE_FADE_V, 255, 60, 0, 0, 0, 0);
+        ledLeaf[index].setLevel(LEVEL_0, 60000, 0, 120000, 8, 1, 120000, 0, index * 64, 0, BACK_TYPE_FADE_V, 255, 60, 0, 0, 0, 0, curCycleTimestamp);
         break;
       case LEVEL_1:
         // fill up the color , no runner
-        ledLeaf[index].setLevel(LEVEL_1, 60000, 0, 120000, 8, 1, 120000, 0, index * 64, 0, BACK_TYPE_FADE_S, 255, 0, 255, 0, 0, 0);
+        ledLeaf[index].setLevel(LEVEL_1, 60000, 0, 120000, 8, 1, 120000, 0, index * 64, 0, BACK_TYPE_FADE_S, 255, 0, 255, 0, 0, 0, curCycleTimestamp);
         break;
       case LEVEL_2:
         // each runner earns score, reverse level, fadeout v
-        ledLeaf[index].setLevel(LEVEL_2, 60000, 5000, 120000, 0, 1, 120000, 4000, index * 64, 0, BACK_TYPE_FADE_V_REVERSE, 255, 60, 255, 0, 1000, 0);
+        ledLeaf[index].setLevel(LEVEL_2, 60000, 5000, 120000, 0, 1, 120000, 4000, index * 64, 0, BACK_TYPE_FADE_V_REVERSE, 255, 60, 255, 0, 1000, 0, curCycleTimestamp);
         break;
       case LEVEL_3:
         // every time a leaf has the same color as the other leaf it gets a score, runner but no score
-        ledLeaf[index].setLevel(LEVEL_3, 60000, 5000, 120000, 2, 1, 0, 0, index * 64, 8, BACK_TYPE_FADE_V, 255, 60, 255, 0, 1000, 0);
+        ledLeaf[index].setLevel(LEVEL_3, 60000, 5000, 120000, 2, 1, 0, 0, index * 64, 8, BACK_TYPE_FADE_V, 255, 60, 255, 0, 1000, 0, curCycleTimestamp);
         break;
       case LEVEL_4:
         // sense to fill it up and the last scores need to be done by the runner
-        ledLeaf[index].setLevel(LEVEL_4, 60000, 0, 120000, 4, 1, 4000, 50000, index * 64, 8, BACK_TYPE_FADE_S_REVERSE, 255, 0, 0, 255, 1000, 0);
+        ledLeaf[index].setLevel(LEVEL_4, 60000, 0, 120000, 4, 1, 50000, 4000, index * 64, 8, BACK_TYPE_FADE_S_REVERSE, 255, 0, 255, 0, 1000, 0, curCycleTimestamp);
         break;
       case LEVEL_5:
         // TBD
         // this should have a party mode, and go from white to color rainbow back to white, ...
-        ledLeaf[index].setLevel(LEVEL_5, 60000, 0, 120000, 1, 1, 4000, 120000, index * 64, 8, BACK_TYPE_NO_FADE, 255, 0, 255, 0, 1000, 5000);
+        ledLeaf[index].setLevel(LEVEL_5, 60000, 0, 120000, 1, 1, 120000, 4000, index * 64, 8, BACK_TYPE_NO_FADE, 255, 0, 255, 0, 1000, 5000, curCycleTimestamp);
         break;
     }
   }
@@ -309,11 +311,11 @@ void TouchTree::updateBrightness() {
   if ( curCycleTimestamp > treeBrightnessLastUpdate + CONFIG_BRIGHTNESS_INTERVAL ) {
     treeBrightnessLastUpdate = curCycleTimestamp;
     treeBrightness += random(3) - 1;
-    if ( treeBrightness < CONFIG_DEFAULT_BRIGHTNESS - 10) {
-      treeBrightness = CONFIG_DEFAULT_BRIGHTNESS - 10;
+    if ( treeBrightness < CONFIG_DEFAULT_BRIGHTNESS - 4) {
+      treeBrightness = CONFIG_DEFAULT_BRIGHTNESS - 4;
     }
-    if ( treeBrightness > CONFIG_DEFAULT_BRIGHTNESS + 10) {
-      treeBrightness = CONFIG_DEFAULT_BRIGHTNESS + 10;
+    if ( treeBrightness > CONFIG_DEFAULT_BRIGHTNESS + 4) {
+      treeBrightness = CONFIG_DEFAULT_BRIGHTNESS + 4;
     }
     FastLED.setBrightness(treeBrightness);
   }
@@ -355,7 +357,8 @@ void LedLeaf::setLevel(
   uint8_t backActiveS,
   uint8_t backInactiveS,
   long runnerBaseTime,
-  long runnerDiffTime
+  long runnerDiffTime,
+  long now
 ) {
   this->level = level;
   this->lastSenseState = false;
@@ -377,6 +380,16 @@ void LedLeaf::setLevel(
   this->backInactiveColorS = backInactiveS;
   this->runnerBaseTime = runnerBaseTime;
   this->runnerDiffTime = runnerDiffTime;
+  this->lastActiveTimestamp = now;
+  PRINTDEC("lvl:", level);
+  PRINTDEC(", scr:", score);
+  PRINTDEC(", up:", scoreNextLevel);
+  PRINTDEC(", min:", scoreMin);
+  PRINTDEC(", max:", scoreMax);
+  PRINTDEC(", inc:", scoreIncTimeRatio);
+  PRINTDEC(", dec:", scoreDecTimeRatio);
+  PRINTDEC(", cap:", scoreLevelSenseCap);
+  PRINTDECLN(", run:", scorePerRunner);
 }
 
 void LedLeaf::doSetup() {
@@ -417,7 +430,7 @@ void LedLeaf::runLevel(uint8_t treeH, long now) {
   scoreSense(sensed, scoreLevelSenseCap, now);
 
   // start runner if neccesary
-  doRunner(sensed, treeH, now);
+  doRunner(sensed, leafH, now);
 
   switch (level) {
     case LEVEL_0:
@@ -455,23 +468,31 @@ bool LedLeaf::doSense() {
   return sensed;
 }
 
+void LedLeaf::doScore(long scoreDiff, long now) {
+  if (scoreDiff > 0) {
+    doFlash(now);
+  }
+  score += scoreDiff;
+  if (score > scoreMax) {
+    score = scoreMax;
+  }
+  if (score < scoreMin) {
+    score = scoreMin;
+  }
+}
 
+void LedLeaf::doFlash(long now) {
+//  flashLeafTimestamp = now;
+}
+    
 // count sense for the score based on the given sense state, now and the lastCycleTimestamp
 void LedLeaf::scoreSense(bool sensed, long scoreCap, long now) {
   if (sensed) {
-    if ( score < scoreMax && score < scoreCap ) {
-      score += ( now - lastCycleTimestamp ) * scoreIncTimeRatio;
-      if ( score > scoreMax ) {
-        score = scoreMax;
-      }
+    if ( score < scoreCap ) {
+      doScore(( now - lastCycleTimestamp ) * scoreIncTimeRatio, now);
     }
   } else {
-    if ( score > scoreMin ) {
-      score -= ( now - lastCycleTimestamp ) * scoreDecTimeRatio;
-      if ( score < scoreMin ) {
-        score = scoreMin;
-      }
-    }
+    doScore(-( now - lastCycleTimestamp ) * scoreDecTimeRatio, now);
   }
   lastCycleTimestamp = now;
 }
@@ -498,10 +519,7 @@ void LedLeaf::startRunner(uint8_t leafH, long now) {
     uint8_t hChange = random(CONFIG_RUNNER_HUE_CHANGE * 2) - CONFIG_RUNNER_HUE_CHANGE;
     uint8_t runnerH = leafH + 128;
     runnerCluster->triggerRunner(leafID, numLeds, runnerSpeed, runnerH, hChange, CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS, runnerSpeed / 8, runnerSpeed / 4, runnerSpeed / 2, now);
-    score += scorePerRunner;
-    if (score > scoreMax){
-      score = scoreMax;
-    }
+    doScore(scorePerRunner, now);
     runnerLastStartTime = now;
   }
 }
@@ -511,6 +529,10 @@ void LedLeaf::updateLeds(uint8_t leafH, long now) {
     CHSV ledBackColor = getLedBackColor(i, score, leafH);
     CHSV ledSprite = runnerCluster->getLedSprite(leafID, i, now);
     CHSV ledValue = draw(ledBackColor, ledSprite);
+
+    if (now < flashLeafTimestamp + CONFIG_SCORE_FLASH_MS) {
+      ledValue.v = 255;
+    }
 
     leds[i] = ledValue;
   }
@@ -531,7 +553,14 @@ bool LedLeaf::canLevelDown() {
 }
 
 CHSV LedLeaf::getLedBackColor(int ledIndex, long score, uint8_t backH) {
-  long scoreNeededForLed = ledIndex * scorePerLed;
+  int correctedLedIndex = ledIndex;
+  switch (backCompositionType) {
+    case BACK_TYPE_FADE_V_REVERSE:
+    case BACK_TYPE_FADE_S_REVERSE:
+      correctedLedIndex = numLeds - ledIndex;
+      break;
+  }
+  long scoreNeededForLed = correctedLedIndex * scorePerLed;
 
   uint8_t backV = backActiveColorV;
   uint8_t backS = backActiveColorS;
@@ -585,7 +614,7 @@ CHSV LedLeaf::getLedBackColor(int ledIndex, long score, uint8_t backH) {
         backS = backActiveColorS;
       } else {
         // while score is reaching
-        int activePercent = 100 - 100 * ( score - scoreNeededForLed ) / scorePerLed;
+        int activePercent = 100 * ( score - scoreNeededForLed ) / scorePerLed;
         backS = fade(backActiveColorS, backInactiveColorS, activePercent);
       }
       break;;
@@ -664,18 +693,12 @@ void LedRunner::start(uint8_t leafID, int numLeds, long runnerSpeed, uint8_t run
   this->fadeOutSpeed = fadeOutSpeed;
 
 #ifdef DEBUG_RUNNER
-  PRINT("runner-start - time: ");
-  PRINTDEC(startTime);
-  PRINT(", leafID: ");
-  PRINTDEC(leafID);
-  PRINT(", hue: ");
-  PRINTDEC(runnerColorH);
-  PRINT(", speed: ");
-  PRINTDEC(runnerSpeed);
-  PRINT(", fadeIn: ");
-  PRINTDEC(fadeInSpeed);
-  PRINT(", actDur: ");
-  PRINTDEC(actLedDuration);
+  PRINTDEC("runner-start - time: ", startTime);
+  PRINTDEC(", leafID: ", leafID);
+  PRINTDEC(", hue: ", runnerColorH);
+  PRINTDEC(", speed: ", runnerSpeed);
+  PRINTDEC(", fadeIn: ", fadeInSpeed);
+  PRINTDEC(", actDur: ", actLedDuration);
   PRINTDECLN(", fadeOut: ", fadeOutSpeed);
 #endif
 }
@@ -729,8 +752,7 @@ SenseSensor::SenseSensor(const uint8_t sendPin, const uint8_t sensePin): sendPin
 // doSetup setups the sensor
 void SenseSensor::doSetup() {
 #ifdef DEBUG_SENSE_SENSOR
-  PRINT("sendPin: ");
-  PRINTDEC(sendPin);
+  PRINTDEC("sendPin: ", sendPin);
   PRINTDECLN(", sensePin: ", sensePin);
 #endif
 
@@ -750,8 +772,7 @@ bool SenseSensor::sense() {
     }
 #ifdef DEBUG_SENSE_SENSOR
     if ( DEBUG_SENSE_SENSOR == sensePin || DEBUG_SENSE_SENSOR == 0) {
-      PRINT("pin: ");
-      PRINTDEC(sensePin);
+      PRINTDEC("pin: ", sensePin);
       PRINTDECLN(", sense: ", senseVal);
     }
 #endif
