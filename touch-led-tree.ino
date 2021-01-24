@@ -1,69 +1,105 @@
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Setup the debug environment
+// debug environment
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// variables to controll the debug output
+////////////////////////////////////////////////////////////////////////////
 #define DEBUG 1
 //#define DEBUG_RUNNER 1
 #define DEBUG_SENSE_SENSOR 0 // turns on logging for all sensors
 //#define DEBUG_SENSE_SENSOR CONFIG_LEAF1_PIN_RECEIVE // turns on logging for sensor of leaf1
 //#define DEBUG_CYCLE_DELAYS 1
 
-// TBC
-//#define DEBUG_SPRITE 1
+////////////////////////////////////////////////////////////////////////////
+// custom hardware configuration
+////////////////////////////////////////////////////////////////////////////
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// include the hardware config
+////////////////////////////////////////////////////////////////////////////
+#include "hardware.h"
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// configuration of the system
-// TBD this should be imported from another file for better branching
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// possible entries of the hardware config
+////////////////////////////////////////////////////////////////////////////
+#ifndef CONFIG_NUM_LEAFS
+#define CONFIG_NUM_LEAFS         CONFIG_NUM_LEAFS_DEFAULT
+#endif //CONFIG_NUM_LEAFS
 
-// configration of the led hardware type
-#define CONFIG_LED_TYPE WS2812B             // WS2812B LED strips are used
-#define CONFIG_COLOR_ORDER GRB              // WS2812B LED strips have GRB color order
-#define CONFIG_DEFAULT_BRIGHTNESS 64        // TBD what is the range is 64 max?
-#define CONFIG_COLOR_TEMPERATUR 0xFF7029    // see https://forum.arduino.cc/index.php?topic=569832.msg3881649#msg3881649
-#define CONFIG_BRIGHTNESS_INTERVAL 500
+#ifndef CONFIG_MAX_LEDS_PER_LEAF
+#define CONFIG_MAX_LEDS_PER_LEAF CONFIG_MAX_LEDS_PER_LEAF_DEFAULT
+#endif
 
+#ifndef LEVEL_TYPE
+#define LEVEL_TYPE_DEFAULT
+#endif
+
+////////////////////////////////////////////////////////////////////////////
 // configuration of the hardware setup
-#define CONFIG_NUM_LEAFS         1
-#define CONFIG_MAX_LEDS_PER_LEAF 29
+////////////////////////////////////////////////////////////////////////////
+
+// config that can be overwritten in the hardware.h file
+////////////////////////////////////////////////////////////////////////////
+#define CONFIG_NUM_LEAFS_DEFAULT         4
+#define CONFIG_MAX_LEDS_PER_LEAF_DEFAULT 12
+
+// hardware config, that cannot be overwritten
+////////////////////////////////////////////////////////////////////////////
 #define CONFIG_LEAF1_NUM_LEDS    CONFIG_MAX_LEDS_PER_LEAF
 #define CONFIG_LEAF2_NUM_LEDS    CONFIG_MAX_LEDS_PER_LEAF
 #define CONFIG_LEAF3_NUM_LEDS    CONFIG_MAX_LEDS_PER_LEAF
 #define CONFIG_LEAF4_NUM_LEDS    CONFIG_MAX_LEDS_PER_LEAF
+
 // PIN configuration - Leaf 1
 #define CONFIG_LEAF1_PIN_SEND    2
 #define CONFIG_LEAF1_PIN_RECEIVE 3
 #define CONFIG_LEAF1_PIN_LED     4
+
 // PIN configuration - Leaf 2
 #define CONFIG_LEAF2_PIN_SEND    5
 #define CONFIG_LEAF2_PIN_RECEIVE 6
 #define CONFIG_LEAF2_PIN_LED     7
+
 // PIN configuration - Leaf 3
 #define CONFIG_LEAF3_PIN_SEND    8
 #define CONFIG_LEAF3_PIN_RECEIVE 9
 #define CONFIG_LEAF3_PIN_LED     10
+
 // PIN configuration - Leaf 4
 #define CONFIG_LEAF4_PIN_SEND    11
 #define CONFIG_LEAF4_PIN_RECEIVE 12
 #define CONFIG_LEAF4_PIN_LED     13
 
-// configuration of the update cycles
-#define CONFIG_UPDATE_INTERVAL 100 // 41.666 == 24 update / sec
+// configration of the led hardware type
+#define CONFIG_LED_TYPE             WS2812B             // WS2812B LED strips are used
+#define CONFIG_COLOR_ORDER          GRB              // WS2812B LED strips have GRB color order
 
-// TBC
+////////////////////////////////////////////////////////////////////////////
+// app configuration
+////////////////////////////////////////////////////////////////////////////
 
+// update intervals
+////////////////////////////////////////////////////////////////////////////
+#define CONFIG_UPDATE_INTERVAL      100 // 41.666 == 24 update / sec
+#define CONFIG_BRIGHTNESS_INTERVAL  500
+
+// color config
+////////////////////////////////////////////////////////////////////////////
+#define CONFIG_DEFAULT_BRIGHTNESS     64        // TBD what is the range is 64 max?
+#define CONFIG_COLOR_TEMPERATUR       0xFF7029    // see https://forum.arduino.cc/index.php?topic=569832.msg3881649#msg3881649
+//#define CONFIG_BACKGROUND_ACTIVE_V    255
+//#define CONFIG_BACKGROUND_INACTIVE_V  60
+#define CONFIG_TRANSPARENT_V          0
+#define CONFIG_SCORE_FLASH_MS         200
+
+// sense conifg
+////////////////////////////////////////////////////////////////////////////
 #define CONFIG_SENSE_MEASUREMENT_SAMPLES      1     // samples done per measurement
-#define CONFIG_SENSE_DISABLE_TIMEOUT_MS       40    // timeout for the measurement that disables the sense measurement for CONFIG_SENSE_ENABLE_RETRY_INTERVAL_MS
+#define CONFIG_SENSE_TIMEOUT_MS               20    // timeout for the measurement that disables the sense measurement for CONFIG_SENSE_ENABLE_RETRY_INTERVAL_MS
 #define CONFIG_SENSE_SENSE_ACTIVE_THREASHOLD  100   // sense threashold to count as active 
 #define CONFIG_SENSE_ENABLE_RETRY_INTERVAL_MS 10000 // retry interval for disabled sensors
 
-#define CONFIG_BACKGROUND_ACTIVE_V   255
-#define CONFIG_BACKGROUND_INACTIVE_V 60
-#define CONFIG_TRANSPARENT_V         0
-
+// background config
+////////////////////////////////////////////////////////////////////////////
 typedef enum BackgroundType {
   BACK_TYPE_FADE_V,
   BACK_TYPE_FADE_V_REVERSE,
@@ -72,7 +108,10 @@ typedef enum BackgroundType {
   BACK_TYPE_NO_FADE
 } bg_type_t;
 
-
+// level config
+////////////////////////////////////////////////////////////////////////////
+#define CONFIG_INITIAL_LEVEL           LEVEL_0
+#define CONFIG_LEVEL_DOWN_IDLE_TIMEOUT 600000   // idle for 10 min levels down
 #define LEVEL_0 0
 #define LEVEL_1 1
 #define LEVEL_2 2
@@ -80,35 +119,31 @@ typedef enum BackgroundType {
 #define LEVEL_4 4
 #define LEVEL_5 5
 
-#define CONFIG_INITIAL_LEVEL LEVEL_0
-
-#define CONFIG_SCORE_FLASH_MS 200
-
-#define CONFIG_BACK_TYPE_FADE_V  0
-#define CONFIG_BACK_TYPE_FADE_S  1
-#define CONFIG_BACK_TYPE_NO_FADE 2
-
+// runner config
+#define CONFIG_MIN_RUNNER_START_INTERVAL_MS   200
+#define CONFIG_RUNNER_HUE_CHANGE              20
+#define CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS  200
+#define CONFIG_RUNNER_START_HUE_INCREMENT     16
+#define CONFIG_RUNNER_AUTO_TRIGGER_MS         0   // 0 disables the autorunner
 #ifdef DEBUG
  #define CONFIG_MAX_ACTIVE_RUNNERS 4
 #else
  #define CONFIG_MAX_ACTIVE_RUNNERS 8
 #endif
-#define CONFIG_RUNNER_GLOW_NUM_LEDS 4
-//#define CONFIG_RUNNER_COLOR       CHSV(64,255,255)
-#define CONFIG_RUNNER_HUE_CHANGE  20
-#define CONFIG_RUNNER_HUE_CHANGE_INTERVAL_MS 200
-#define CONFIG_RUNNER_START_HUE_INCREMENT 16
-#define CONFIG_RUNNER_AUTO_TRIGGER_MS 0   // 0 disables the autorunner
 
-#define CONFIG_MIN_RUNNER_START_INTERVAL_MS          200
+////////////////////////////////////////////////////////////////////////////
+// config inculdes
+////////////////////////////////////////////////////////////////////////////
 
-#define CONFIG_LEVEL_DOWN_IDLE_TIMEOUT 600000   // idle for 10 min levels down
-
+// libray includes
+////////////////////////////////////////////////////////////////////////////
 #include <CapacitiveSensor.h>
 // This suppress the pragma warning of FastLED (see https://github.com/FastLED/FastLED/issues/797)
 #define FASTLED_INTERNAL
 #include "FastLED.h"
 
+// local includes
+////////////////////////////////////////////////////////////////////////////
 #include "debug.h"
 #include "sense_sensor.h"
 #include "led_runner.h"
@@ -117,15 +152,15 @@ typedef enum BackgroundType {
 #include "touch_tree.h"
 
 ///////////////////////////////////////////////////////////
-// Main defines
+// led tree application
 ///////////////////////////////////////////////////////////
-// MOA OK
 
+// main
+///////////////////////////////////////////////////////////
 // defined globaly so it will be a static struct
 TouchTree touchTree;
 
-void setup()
-{
+void setup() {
 #if DEBUG
   Serial.begin(9600);
 #endif
@@ -133,24 +168,25 @@ void setup()
   touchTree.setup();
 }
 
-void loop()
-{
+void loop() {
   touchTree.loop();
 }
 
-///////////////////////////////////////////////////////////
-
-///////////////////////////////////////////////////////////
 // TouchTree
 ///////////////////////////////////////////////////////////
-// MOA TBD check, but looks good
 
 TouchTree::TouchTree()
   : ledLeaf( {
   LedLeaf(1, CONFIG_LEAF1_NUM_LEDS, CONFIG_LEAF1_PIN_SEND, CONFIG_LEAF1_PIN_RECEIVE, &this->runnerCluster),
-  //        LedLeaf(2, CONFIG_LEAF2_NUM_LEDS, CONFIG_LEAF2_PIN_SEND, CONFIG_LEAF2_PIN_RECEIVE, &this->runnerCluster),
-  //        LedLeaf(3, CONFIG_LEAF3_NUM_LEDS, CONFIG_LEAF3_PIN_SEND, CONFIG_LEAF3_PIN_RECEIVE, &this->runnerCluster),
-  //        LedLeaf(4, CONFIG_LEAF4_NUM_LEDS, CONFIG_LEAF4_PIN_SEND, CONFIG_LEAF4_PIN_RECEIVE, &this->runnerCluster),
+#if CONFIG_NUM_LEAFS >= 2
+          LedLeaf(2, CONFIG_LEAF2_NUM_LEDS, CONFIG_LEAF2_PIN_SEND, CONFIG_LEAF2_PIN_RECEIVE, &this->runnerCluster),
+#endif
+#if CONFIG_NUM_LEAFS >= 3
+          LedLeaf(3, CONFIG_LEAF3_NUM_LEDS, CONFIG_LEAF3_PIN_SEND, CONFIG_LEAF3_PIN_RECEIVE, &this->runnerCluster),
+#endif
+#if CONFIG_NUM_LEAFS >= 4
+          LedLeaf(4, CONFIG_LEAF4_NUM_LEDS, CONFIG_LEAF4_PIN_SEND, CONFIG_LEAF4_PIN_RECEIVE, &this->runnerCluster),
+#endif
   }),
   runnerCluster(),
   treeBrightness(CONFIG_DEFAULT_BRIGHTNESS) {
@@ -757,7 +793,7 @@ void SenseSensor::doSetup() {
 #endif
 
   sensor.set_CS_AutocaL_Millis(0xFFFFFFFF);
-  sensor.set_CS_Timeout_Millis(CONFIG_SENSE_DISABLE_TIMEOUT_MS + 1);
+  sensor.set_CS_Timeout_Millis(CONFIG_SENSE_TIMEOUT_MS + 1);
 }
 
 // sense returns true or false for the sensor
@@ -765,7 +801,7 @@ bool SenseSensor::sense() {
   if (enabled) {
     long startTime = millis(); // this needs to use millis so it actually just measures the time for the measurement of the sense sensor
     long senseVal = sensor.capacitiveSensor(CONFIG_SENSE_MEASUREMENT_SAMPLES);
-    if ( (millis() - startTime ) > CONFIG_SENSE_DISABLE_TIMEOUT_MS) {
+    if ( (millis() - startTime ) > CONFIG_SENSE_TIMEOUT_MS) {
       PRINTDECLN("WARN: disable sensor because of timeout on pin ", sensePin);
       this->enabled = false;
       this->disabledSince = startTime;
@@ -784,7 +820,7 @@ bool SenseSensor::sense() {
 #endif
       this->enabled = true;
     }
-    return enabled; // for disabled sensors this will create pulses in the CONFIG_SENSE_DISABLE_TIMEOUT_MS interval, should create nice runner effects if the sense is offline
+    return enabled; // for disabled sensors this will create pulses in the CONFIG_SENSE_TIMEOUT_MS interval, should create nice runner effects if the sense is offline
   }
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
