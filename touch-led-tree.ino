@@ -7,7 +7,7 @@
 ////////////////////////////////////////////////////////////////////////////
 #define DEBUG 1
 //#define DEBUG_RUNNER 1
-#define DEBUG_SENSE_SENSOR 0 // turns on logging for all sensors
+//#define DEBUG_SENSE_SENSOR 0 // turns on logging for all sensors
 //#define DEBUG_SENSE_SENSOR CONFIG_LEAF1_PIN_RECEIVE // turns on logging for sensor of leaf1
 //#define DEBUG_CYCLE_DELAYS 1
 
@@ -30,8 +30,13 @@
 #endif
 
 #ifndef CONFIG_LEVEL_TYPE
-#define CONFIG_LEVEL_TYPE_DEFAULT
+#define CONFIG_LEVEL_TYPE CONFIG_LEVEL_TYPE_DEFAULT
 #endif
+
+#ifndef CONFIG_SENSE_TYPE
+#define CONFIG_SENSE_TYPE CONFIG_SENSE_TYPE_100M_RESISTOR
+#endif
+
 
 ////////////////////////////////////////////////////////////////////////////
 // configuration of the hardware setup
@@ -93,10 +98,18 @@
 
 // sense conifg
 ////////////////////////////////////////////////////////////////////////////
-#define CONFIG_SENSE_MEASUREMENT_SAMPLES      1     // samples done per measurement
-#define CONFIG_SENSE_TIMEOUT_MS               20    // timeout for the measurement that disables the sense measurement for CONFIG_SENSE_ENABLE_RETRY_INTERVAL_MS
-#define CONFIG_SENSE_SENSE_ACTIVE_THREASHOLD  100   // sense threashold to count as active 
-#define CONFIG_SENSE_ENABLE_RETRY_INTERVAL_MS 10000 // retry interval for disabled sensors
+#define CONFIG_SENSE_TIMEOUT_MS               100    // timeout for the measurement that disables the sense measurement for CONFIG_SENSE_ENABLE_RETRY_INTERVAL_MS
+#define CONFIG_SENSE_ENABLE_RETRY_INTERVAL_MS 5000 // retry interval for disabled sensors
+
+#if  CONFIG_SENSE_TYPE == CONFIG_SENSE_TYPE_100K_RESISTOR
+ #define CONFIG_SENSE_MEASUREMENT_SAMPLES      10     // samples done per measurement
+ #define CONFIG_SENSE_SENSE_ACTIVE_THREASHOLD  15   // sense threashold to count as active 
+#else
+#ifdef CONFIG_SENSE_TYPE == CONFIG_SENSE_TYPE_100M_RESISTOR
+ #define CONFIG_SENSE_MEASUREMENT_SAMPLES      1     // samples done per measurement
+ #define CONFIG_SENSE_SENSE_ACTIVE_THREASHOLD  100   // sense threashold to count as active 
+#endif
+#endif
 
 // background config
 ////////////////////////////////////////////////////////////////////////////
@@ -255,6 +268,10 @@ void TouchTree::runLevel() {
       // this needs to be before leaf.runLevel so it outruns the normal sense if colors are equal
           scoreLeafColor();
       }
+      if (treeType == LEVEL_TYPE_LAMP) {
+      // this needs to be before leaf.runLevel so it outruns the normal sense if colors are equal
+         treeColorH += 2;
+      }
       break;
     case LEVEL_4:
       break;
@@ -311,7 +328,7 @@ void TouchTree::checkLevelChange() {
       break;
   }
   if ( canLevelUp ) {
-    if (treeType == LEVEL_TYPE_PROTO_GAME) {
+    if (treeType == LEVEL_TYPE_LAMP && treeLevel == LEVEL_3) {
       setLevel(0);
     } else {
       setLevel(treeLevel + 1);
@@ -364,27 +381,19 @@ void TouchTree::setLevel(uint8_t level) {
         switch (treeLevel) {
           case LEVEL_0:
             // dimmed lamp
-            ledLeaf[index].setLevel(LEVEL_0, 20000, 0, 120000, 1, 1, 120000, 0, index * 64, 0, BACK_TYPE_NO_FADE, 60, 0, 0, 0, 0, 0, curCycleTimestamp);
+            ledLeaf[index].setLevel(LEVEL_0, 2000, 0, 120000, 1, 1, 120000, 0, index * 64, 0, BACK_TYPE_NO_FADE, 60, 0, 0, 0, 0, 0, curCycleTimestamp);
             break;
           case LEVEL_1:
             // dimmed lamp
-            ledLeaf[index].setLevel(LEVEL_1, 20000, 0, 120000, 1, 1, 120000, 0, index * 64, 0, BACK_TYPE_NO_FADE, 80, 0, 0, 0, 0, 0, curCycleTimestamp);
+            ledLeaf[index].setLevel(LEVEL_3, 2000, 0, 120000, 1, 1, 120000, 0, index * 64, 0, BACK_TYPE_NO_FADE, 120, 0, 0, 0, 0, 0, curCycleTimestamp);
             break;
           case LEVEL_2:
-            // dimmed lamp
-            ledLeaf[index].setLevel(LEVEL_2, 20000, 0, 120000, 1, 1, 120000, 0, index * 64, 0, BACK_TYPE_NO_FADE, 100, 0, 0, 0, 0, 0, curCycleTimestamp);
+            // bright lamp
+            ledLeaf[index].setLevel(LEVEL_4, 2000, 0, 120000, 1, 1, 120000, 0, index * 64, 0, BACK_TYPE_NO_FADE, 255, 0, 0, 0, 0, 0, curCycleTimestamp);
             break;
           case LEVEL_3:
-            // dimmed lamp
-            ledLeaf[index].setLevel(LEVEL_3, 20000, 0, 120000, 1, 1, 120000, 0, index * 64, 0, BACK_TYPE_NO_FADE, 120, 0, 0, 0, 0, 0, curCycleTimestamp);
-            break;
-          case LEVEL_4:
-            // bright lamp
-            ledLeaf[index].setLevel(LEVEL_4, 20000, 0, 120000, 1, 1, 120000, 0, index * 64, 0, BACK_TYPE_NO_FADE, 255, 0, 0, 0, 0, 0, curCycleTimestamp);
-            break;
-          case LEVEL_5:
             // party lamp
-            ledLeaf[index].setLevel(LEVEL_5, 60000, 0, 120000, 1, 1, 120000, 4000, index * 64, 8, BACK_TYPE_NO_FADE, 255, 0, 255, 0, 1000, 5000, curCycleTimestamp);
+            ledLeaf[index].setLevel(LEVEL_5, 10000, 0, 120000, 1, 10, 120000, 4000, index * 64, 8, BACK_TYPE_NO_FADE, 255, 0, 255, 0, 1000, 0, curCycleTimestamp);
             break;
         }
       }
@@ -842,7 +851,7 @@ void SenseSensor::doSetup() {
 #endif
 
   sensor.set_CS_AutocaL_Millis(0xFFFFFFFF);
-  sensor.set_CS_Timeout_Millis(CONFIG_SENSE_TIMEOUT_MS + 1);
+  sensor.set_CS_Timeout_Millis(CONFIG_SENSE_TIMEOUT_MS + 10);
 }
 
 // sense returns true or false for the sensor
