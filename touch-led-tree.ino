@@ -29,8 +29,8 @@
 #define CONFIG_MAX_LEDS_PER_LEAF CONFIG_MAX_LEDS_PER_LEAF_DEFAULT
 #endif
 
-#ifndef LEVEL_TYPE
-#define LEVEL_TYPE_DEFAULT
+#ifndef CONFIG_LEVEL_TYPE
+#define CONFIG_LEVEL_TYPE_DEFAULT
 #endif
 
 ////////////////////////////////////////////////////////////////////////////
@@ -110,6 +110,7 @@ typedef enum BackgroundType {
 
 // level config
 ////////////////////////////////////////////////////////////////////////////
+#define CONFIG_LEVEL_TYPE_DEFAULT      LEVEL_TYPE_PROTO_GAME
 #define CONFIG_INITIAL_LEVEL           LEVEL_0
 #define CONFIG_LEVEL_DOWN_IDLE_TIMEOUT 600000   // idle for 10 min levels down
 #define LEVEL_0 0
@@ -118,6 +119,10 @@ typedef enum BackgroundType {
 #define LEVEL_3 3
 #define LEVEL_4 4
 #define LEVEL_5 5
+typedef enum LevelTypes {
+  LEVEL_TYPE_PROTO_GAME,
+  LEVEL_TYPE_LAMP
+} level_t;
 
 // runner config
 #define CONFIG_MIN_RUNNER_START_INTERVAL_MS   200
@@ -189,6 +194,7 @@ TouchTree::TouchTree()
 #endif
   }),
   runnerCluster(),
+  treeType(CONFIG_LEVEL_TYPE),
   treeBrightness(CONFIG_DEFAULT_BRIGHTNESS) {
 }
 
@@ -235,6 +241,7 @@ void TouchTree::loop() {
 #endif
 };
 
+
 void TouchTree::runLevel() {
   switch (treeLevel) {
     case LEVEL_0:
@@ -244,8 +251,10 @@ void TouchTree::runLevel() {
     case LEVEL_2:
       break;
     case LEVEL_3:
+      if (treeType == LEVEL_TYPE_PROTO_GAME) {
       // this needs to be before leaf.runLevel so it outruns the normal sense if colors are equal
-      scoreLeafColor();
+          scoreLeafColor();
+      }
       break;
     case LEVEL_4:
       break;
@@ -276,7 +285,7 @@ void TouchTree::checkLevelChange() {
     if ( !ledLeaf[index].canLevelUp() ) {
       canLevelUp = false;
     }
-    if ( !ledLeaf[index].canLevelDown() ) {
+    if (treeType == LEVEL_TYPE_LAMP || !ledLeaf[index].canLevelDown() ) {
       canLevelDown = false;
     }
   }
@@ -295,12 +304,18 @@ void TouchTree::checkLevelChange() {
     case LEVEL_4:
       break;
     case LEVEL_5:
-      // We should never go bejond the last level
-      canLevelUp = false;
+      if (treeType == LEVEL_TYPE_PROTO_GAME) {
+        // We should never go bejond the last level
+        canLevelUp = false;
+      }
       break;
   }
   if ( canLevelUp ) {
-    setLevel(treeLevel + 1);
+    if (treeType == LEVEL_TYPE_PROTO_GAME) {
+      setLevel(0);
+    } else {
+      setLevel(treeLevel + 1);
+    }
   } else if ( canLevelDown ) {
     setLevel(treeLevel - 1);
   }
@@ -312,34 +327,68 @@ void TouchTree::setLevel(uint8_t level) {
   treeLevel = level;
   levelStartTime = curCycleTimestamp;
   runnerCluster.reset();
-  for (int index = 0; index < CONFIG_NUM_LEAFS; index++) {
-    switch (treeLevel) {
-      case LEVEL_0:
-        // fill up the white, no runner
-        ledLeaf[index].setLevel(LEVEL_0, 60000, 0, 120000, 8, 1, 120000, 0, index * 64, 0, BACK_TYPE_FADE_V, 255, 60, 0, 0, 0, 0, curCycleTimestamp);
-        break;
-      case LEVEL_1:
-        // fill up the color , no runner
-        ledLeaf[index].setLevel(LEVEL_1, 60000, 0, 120000, 8, 1, 120000, 0, index * 64, 0, BACK_TYPE_FADE_S, 255, 0, 255, 0, 0, 0, curCycleTimestamp);
-        break;
-      case LEVEL_2:
-        // each runner earns score, reverse level, fadeout v
-        ledLeaf[index].setLevel(LEVEL_2, 60000, 5000, 120000, 0, 1, 120000, 4000, index * 64, 0, BACK_TYPE_FADE_V_REVERSE, 255, 60, 255, 0, 1000, 0, curCycleTimestamp);
-        break;
-      case LEVEL_3:
-        // every time a leaf has the same color as the other leaf it gets a score, runner but no score
-        ledLeaf[index].setLevel(LEVEL_3, 60000, 5000, 120000, 2, 1, 0, 0, index * 64, 8, BACK_TYPE_FADE_V, 255, 60, 255, 0, 1000, 0, curCycleTimestamp);
-        break;
-      case LEVEL_4:
-        // sense to fill it up and the last scores need to be done by the runner
-        ledLeaf[index].setLevel(LEVEL_4, 60000, 0, 120000, 4, 1, 50000, 4000, index * 64, 8, BACK_TYPE_FADE_S_REVERSE, 255, 0, 255, 0, 1000, 0, curCycleTimestamp);
-        break;
-      case LEVEL_5:
-        // TBD
-        // this should have a party mode, and go from white to color rainbow back to white, ...
-        ledLeaf[index].setLevel(LEVEL_5, 60000, 0, 120000, 1, 1, 120000, 4000, index * 64, 8, BACK_TYPE_NO_FADE, 255, 0, 255, 0, 1000, 5000, curCycleTimestamp);
-        break;
-    }
+  switch (treeType) {
+    case LEVEL_TYPE_PROTO_GAME:
+      for (int index = 0; index < CONFIG_NUM_LEAFS; index++) {
+        switch (treeLevel) {
+          case LEVEL_0:
+            // fill up the white, no runner
+            ledLeaf[index].setLevel(LEVEL_0, 60000, 0, 120000, 8, 1, 120000, 0, index * 64, 0, BACK_TYPE_FADE_V, 255, 60, 0, 0, 0, 0, curCycleTimestamp);
+            break;
+          case LEVEL_1:
+            // fill up the color , no runner
+            ledLeaf[index].setLevel(LEVEL_1, 60000, 0, 120000, 8, 1, 120000, 0, index * 64, 0, BACK_TYPE_FADE_S, 255, 0, 255, 0, 0, 0, curCycleTimestamp);
+            break;
+          case LEVEL_2:
+            // each runner earns score, reverse level, fadeout v
+            ledLeaf[index].setLevel(LEVEL_2, 60000, 5000, 120000, 0, 1, 120000, 4000, index * 64, 0, BACK_TYPE_FADE_V_REVERSE, 255, 60, 255, 0, 1000, 0, curCycleTimestamp);
+            break;
+          case LEVEL_3:
+            // every time a leaf has the same color as the other leaf it gets a score, runner but no score
+            ledLeaf[index].setLevel(LEVEL_3, 60000, 5000, 120000, 2, 1, 0, 0, index * 64, 8, BACK_TYPE_FADE_V, 255, 60, 255, 0, 1000, 0, curCycleTimestamp);
+            break;
+          case LEVEL_4:
+            // sense to fill it up and the last scores need to be done by the runner
+            ledLeaf[index].setLevel(LEVEL_4, 60000, 0, 120000, 4, 1, 50000, 4000, index * 64, 8, BACK_TYPE_FADE_S_REVERSE, 255, 0, 255, 0, 1000, 0, curCycleTimestamp);
+            break;
+          case LEVEL_5:
+            // TBD
+            // this should have a party mode, and go from white to color rainbow back to white, ...
+            ledLeaf[index].setLevel(LEVEL_5, 60000, 0, 120000, 1, 1, 120000, 4000, index * 64, 8, BACK_TYPE_NO_FADE, 255, 0, 255, 0, 1000, 5000, curCycleTimestamp);
+            break;
+        }
+      }
+      break;
+    case LEVEL_TYPE_LAMP:
+      for (int index = 0; index < CONFIG_NUM_LEAFS; index++) {
+        switch (treeLevel) {
+          case LEVEL_0:
+            // dimmed lamp
+            ledLeaf[index].setLevel(LEVEL_0, 20000, 0, 120000, 1, 1, 120000, 0, index * 64, 0, BACK_TYPE_NO_FADE, 60, 0, 0, 0, 0, 0, curCycleTimestamp);
+            break;
+          case LEVEL_1:
+            // dimmed lamp
+            ledLeaf[index].setLevel(LEVEL_1, 20000, 0, 120000, 1, 1, 120000, 0, index * 64, 0, BACK_TYPE_NO_FADE, 80, 0, 0, 0, 0, 0, curCycleTimestamp);
+            break;
+          case LEVEL_2:
+            // dimmed lamp
+            ledLeaf[index].setLevel(LEVEL_2, 20000, 0, 120000, 1, 1, 120000, 0, index * 64, 0, BACK_TYPE_NO_FADE, 100, 0, 0, 0, 0, 0, curCycleTimestamp);
+            break;
+          case LEVEL_3:
+            // dimmed lamp
+            ledLeaf[index].setLevel(LEVEL_3, 20000, 0, 120000, 1, 1, 120000, 0, index * 64, 0, BACK_TYPE_NO_FADE, 120, 0, 0, 0, 0, 0, curCycleTimestamp);
+            break;
+          case LEVEL_4:
+            // bright lamp
+            ledLeaf[index].setLevel(LEVEL_4, 20000, 0, 120000, 1, 1, 120000, 0, index * 64, 0, BACK_TYPE_NO_FADE, 255, 0, 0, 0, 0, 0, curCycleTimestamp);
+            break;
+          case LEVEL_5:
+            // party lamp
+            ledLeaf[index].setLevel(LEVEL_5, 60000, 0, 120000, 1, 1, 120000, 4000, index * 64, 8, BACK_TYPE_NO_FADE, 255, 0, 255, 0, 1000, 5000, curCycleTimestamp);
+            break;
+        }
+      }
+      break;
   }
 }
 
