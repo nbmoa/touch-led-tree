@@ -5,7 +5,7 @@ struct TouchTree {
     LedLeaf       ledLeaf[CONFIG_NUM_LEAFS];  // led leafs
     RunnerCluster runnerCluster;              // led runner cluster
 
-    const level_t treeType;
+    level_t treeType;
     uint8_t       treeLevel;
     long          levelStartTime;
     uint8_t       treeColorH;

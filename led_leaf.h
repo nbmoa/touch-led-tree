@@ -3,6 +3,7 @@ struct LedLeaf {
     uint8_t leafID;                 // ID of the leaf
     int     numLeds;                // number of leds of the leaf
     uint8_t level;                  // current level of the leaf
+    level_t treeType;
     long    lastCycleTimestamp;     // the timestamp of the last cycle
 
     // sense
@@ -48,6 +49,7 @@ struct LedLeaf {
             RunnerCluster *runnerCluster);
 void setLevel(
     uint8_t level,
+    level_t treeType,
     long scoreNextLevel,
     long scoreMin,
     long scoreMax,
