@@ -23,7 +23,7 @@
 ////////////////////////////////////////////////////////////////////////////
 #ifndef CONFIG_NUM_LEAFS
 #define CONFIG_NUM_LEAFS         CONFIG_NUM_LEAFS_DEFAULT
-#endif //CONFIG_NUM_LEAFS
+#endif
 
 #ifndef CONFIG_MAX_LEDS_PER_LEAF
 #define CONFIG_MAX_LEDS_PER_LEAF CONFIG_MAX_LEDS_PER_LEAF_DEFAULT
@@ -272,7 +272,7 @@ void TouchTree::runLevel() {
       }
       if (treeType == LEVEL_TYPE_LAMP) {
       // this needs to be before leaf.runLevel so it outruns the normal sense if colors are equal
-         treeColorH += 2;
+         treeColorH += 1;
       }
       break;
     case LEVEL_4:
@@ -387,15 +387,15 @@ void TouchTree::setLevel(uint8_t level) {
             break;
           case LEVEL_1:
             // dimmed lamp
-            ledLeaf[index].setLevel(LEVEL_3, treeType, 2000, 0, 120000, 1, 1, 120000, 0, index * 64, 0, BACK_TYPE_NO_FADE, 120, 0, 0, 0, 0, 0, curCycleTimestamp);
+            ledLeaf[index].setLevel(LEVEL_1, treeType, 2000, 0, 120000, 1, 1, 120000, 0, index * 64, 0, BACK_TYPE_NO_FADE, 120, 0, 0, 0, 0, 0, curCycleTimestamp);
             break;
           case LEVEL_2:
             // bright lamp
-            ledLeaf[index].setLevel(LEVEL_4, treeType, 2000, 0, 120000, 1, 1, 120000, 0, index * 64, 0, BACK_TYPE_NO_FADE, 255, 0, 0, 0, 0, 0, curCycleTimestamp);
+            ledLeaf[index].setLevel(LEVEL_2, treeType, 2000, 0, 120000, 1, 1, 120000, 0, index * 64, 0, BACK_TYPE_NO_FADE, 255, 0, 0, 0, 0, 0, curCycleTimestamp);
             break;
           case LEVEL_3:
             // party lamp
-            ledLeaf[index].setLevel(LEVEL_5, treeType, 10000, 0, 120000, 1, 10, 120000, 4000, index * 64, 8, BACK_TYPE_NO_FADE, 255, 0, 255, 0, 1000, 0, curCycleTimestamp);
+            ledLeaf[index].setLevel(LEVEL_3, treeType, 10000, 0, 120000, 1, 10, 120000, 4000, index * 64, 8, BACK_TYPE_NO_FADE, 255, 0, 255, 0, 1000, 0, curCycleTimestamp);
             break;
         }
       }
@@ -538,6 +538,8 @@ void LedLeaf::runLevel(uint8_t treeH, long now) {
     case LEVEL_2:
       break;
     case LEVEL_3:
+      PRINTDEC("MOA-n:", now);
+      PRINTDECLN("lp:", runnerLastStartTime + 2000);
       if (treeType == LEVEL_TYPE_LAMP) {
         if (now > runnerLastStartTime + 2000) {
           startRunner(leafH, now);
@@ -875,10 +877,19 @@ bool SenseSensor::sense() {
     }
 #ifdef DEBUG_SENSE_SENSOR
     if ( DEBUG_SENSE_SENSOR == sensePin || DEBUG_SENSE_SENSOR == 0) {
-      PRINTDEC("pin: ", sensePin);
-      PRINTDECLN(", sense: ", senseVal);
+      static int i = 0;
+      i++;
+      if ( i == 1 ) {
+        PRINTDEC("pin: ", sensePin);
+        PRINTDEC(", sense: ", senseVal);
+      } else if ( i == 10 ) {
+        PRINTDECLN(" : ", senseVal);
+        i = 0;
+      }else {
+        PRINTDEC(" : ", senseVal);
+      }
     }
-#endif
+#endif // DEBUG_SENSE_SENSOR
     return senseVal >= CONFIG_SENSE_SENSE_ACTIVE_THREASHOLD || senseVal <= -CONFIG_SENSE_SENSE_ACTIVE_THREASHOLD;
   } else {
     if ( millis() > (unsigned long)(disabledSince + CONFIG_SENSE_ENABLE_RETRY_INTERVAL_MS) ) {
